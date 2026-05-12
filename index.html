@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freddy Game - Platform Adventure</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" tabindex="0"></canvas>
+        <div id="hud">
+            <div id="hud-left">
+                <span id="lives"></span>
+                <span id="score">Score: 0</span>
+            </div>
+            <div id="hud-center">
+                <span id="level">Level 1</span>
+            </div>
+            <div id="hud-right">
+                <span id="collectibles"></span>
+            </div>
+        </div>
+        <div id="overlay">
+            <div id="overlay-content">
+                <h1 id="overlay-title">FREDDY GAME</h1>
+                <p id="overlay-text">Press ENTER to start</p>
+                <div id="controls-info">
+                    <p><strong>W</strong> - Jump | <strong>A</strong> - Left | <strong>D</strong> - Right | <strong>S</strong> - Crouch</p>
+                    <p><strong>SPACE</strong> - Throw Paper Roll</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="js/assets.js"></script>
+    <script src="js/sprite.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/collision.js"></script>
+    <script src="js/projectile.js"></script>
+    <script src="js/enemy.js"></script>
+    <script src="js/collectible.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/level.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
