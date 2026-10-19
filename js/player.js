@@ -49,20 +49,32 @@ class Player {
         this.crouching = input.isDown('KeyS') && this.onGround;
 
         if (this.crouching) {
-            if (!wasCrouching) {
-                this.y += this.baseHeight - this.crouchHeight;
-            }
-            this.height = this.crouchHeight;
-            this.state = 'crouch';
-
-            if (input.isDown('KeyA')) {
-                this.velocityX = -this.speed * 0.4;
-                this.facing = -1;
-            } else if (input.isDown('KeyD')) {
-                this.velocityX = this.speed * 0.4;
-                this.facing = 1;
+            this.velocityX = 0;
+        } else {
+            if (this.wallJumpLockout > 0) {
+                this.wallJumpLockout--;
             } else {
-                this.velocityX = 0;
+                if (input.isDown('KeyA')) {
+                    this.velocityX = -this.speed;
+                    this.facing = -1;
+                    if (this.onGround) this.state = 'walk';
+                } else if (input.isDown('KeyD')) {
+                    this.velocityX = this.speed;
+                    this.facing = 1;
+                    if (this.onGround) this.state = 'walk';
+                } else {
+                    // Friction/stopping
+                    if (this.onGround) {
+                        this.velocityX = 0;
+                        if (this.state !== 'attack' && this.state !== 'melee') {
+                            this.state = 'idle';
+                        }
+                    } else {
+                        // Air friction
+                        this.velocityX *= 0.9;
+                        if (Math.abs(this.velocityX) < 0.5) this.velocityX = 0;
+                    }
+                }
             }
         } else {
             if (wasCrouching) {
@@ -85,11 +97,28 @@ class Player {
                 }
             }
 
-            if (input.isDown('KeyW') && this.onGround) {
+            if (input.isPressed('KeyW')) {
+            if (this.onGround) {
+                // First jump
                 this.velocityY = this.jumpForce;
                 this.onGround = false;
                 this.state = 'jump';
+                this.jumpsLeft = this.maxJumps - 1;
+            } else if (this.touchingWall !== 0) {
+                // Wall jump
+                this.velocityY = this.jumpForce * 0.9;
+                this.velocityX = -this.touchingWall * this.speed * 1.5;
+                this.wallJumpLockout = 15; // Lock horizontal input for a few frames
+                this.facing = -this.touchingWall;
+                this.state = 'jump';
+                this.jumpsLeft = this.maxJumps - 1;
+            } else if (this.jumpsLeft > 0) {
+                // Double jump
+                this.velocityY = this.jumpForce * 0.8;
+                this.state = 'jump';
+                this.jumpsLeft--;
             }
+        }
         }
 
         if (input.isPressed('Space') || input.isPressed('KeyP')) {

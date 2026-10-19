@@ -20,79 +20,9 @@ class SpriteParser {
     }
 
     processImage() {
-        const canvas = document.createElement('canvas');
-        canvas.width = this.image.width;
-        canvas.height = this.image.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(this.image, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        const w = canvas.width;
-        const h = canvas.height;
-
-        // Pass 1: Aggressive chroma key removal
-        // The background is bright green (#00FF00) with slight variations
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // If green is dominant and high, it's background
-            if (g > 150 && g > r * 4 && g > b * 4) {
-                data[i + 3] = 0;
-            }
-            // Semi-green edge pixels - make partially transparent
-            else if (g > 100 && g > r * 2 && g > b * 2) {
-                const greenDominance = (g - Math.max(r, b)) / 255;
-                data[i + 3] = Math.floor(data[i + 3] * (1 - greenDominance * 0.9));
-                // Reduce green channel
-                data[i + 1] = Math.floor(g * (1 - greenDominance * 0.7));
-            }
-        }
-
-        // Pass 2: Edge cleanup - sample neighbors for remaining green-tinted pixels
-        for (let y = 1; y < h - 1; y++) {
-            for (let x = 1; x < w - 1; x++) {
-                const i = (y * w + x) * 4;
-                const g = data[i + 1];
-                const a = data[i + 3];
-
-                // If pixel still has significant green and is near transparent
-                if (g > 60 && a > 0 && a < 255) {
-                    const hasTransparent = 
-                        data[((y-1) * w + x) * 4 + 3] === 0 ||
-                        data[((y+1) * w + x) * 4 + 3] === 0 ||
-                        data[(y * w + x - 1) * 4 + 3] === 0 ||
-                        data[(y * w + x + 1) * 4 + 3] === 0;
-
-                    if (hasTransparent) {
-                        // Sample non-green neighbors
-                        let sumR = 0, sumB = 0, count = 0;
-                        const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-                        for (const [dx, dy] of dirs) {
-                            const ni = ((y + dy) * w + (x + dx)) * 4;
-                            const ng = data[ni + 1];
-                            const na = data[ni + 3];
-                            if (ng < 60 && na > 128) {
-                                sumR += data[ni];
-                                sumB += data[ni + 2];
-                                count++;
-                            }
-                        }
-
-                        if (count > 0) {
-                            const blend = 0.5;
-                            data[i] = Math.floor(data[i] * (1 - blend) + (sumR / count) * blend);
-                            data[i + 1] = Math.floor(data[i + 1] * (1 - blend) + 20 * blend);
-                            data[i + 2] = Math.floor(data[i + 2] * (1 - blend) + (sumB / count) * blend);
-                        }
-                    }
-                }
-            }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-        this.processedImage = canvas;
+        // The background has already been removed from the image file itself,
+        // so we don't need the runtime chroma-key logic anymore.
+        this.processedImage = this.image;
     }
 
     extractSprite(x, y, w, h, targetW, targetH) {
