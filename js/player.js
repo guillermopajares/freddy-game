@@ -17,6 +17,9 @@ class Player {
         this.invincible = false;
         this.invincibleTimer = 0;
         this.crouching = false;
+        this.dashTimer = 0;
+        this.dashCooldown = 0;
+        this.dashSpeed = 8;
 
         this.state = 'idle';
         this.animFrame = 0;
@@ -24,6 +27,10 @@ class Player {
         this.attackCooldown = 0;
         this.attackDuration = 0;
 
+        this.wallJumpLockout = 0;
+        this.touchingWall = 0;
+        this.maxJumps = 2;
+        this.jumpsLeft = 2;
         this.projectiles = [];
         this.meleeSwing = null;
     }
@@ -48,7 +55,19 @@ class Player {
         const wasCrouching = this.crouching;
         this.crouching = input.isDown('KeyS') && this.onGround;
 
-        if (this.crouching) {
+        if (this.dashCooldown > 0) this.dashCooldown--;
+
+        if (input.isPressed('ShiftLeft') && this.dashCooldown === 0 && !this.crouching) {
+            this.dashTimer = 15; // 15 frames of dashing
+            this.dashCooldown = 60; // 60 frames cooldown
+        }
+
+        if (this.dashTimer > 0) {
+            this.dashTimer--;
+            this.velocityX = this.dashSpeed * this.facing;
+            this.velocityY = 0; // Lock vertical movement
+            this.state = 'run';
+        } else if (this.crouching) {
             this.velocityX = 0;
         } else {
             if (this.wallJumpLockout > 0) {
@@ -82,7 +101,9 @@ class Player {
             }
             this.height = this.baseHeight;
 
-            if (input.isDown('KeyA')) {
+            if (this.wallJumpLockout > 0) {
+                this.wallJumpLockout--;
+            } else if (input.isDown('KeyA')) {
                 this.velocityX = -this.speed;
                 this.facing = -1;
                 if (this.onGround) this.state = 'walk';
@@ -97,7 +118,12 @@ class Player {
                 }
             }
 
-            if (input.isPressed('KeyW')) {
+            // Fast fall
+        if (!this.onGround && input.isPressed('KeyS')) {
+            this.velocityY = 15; // Increased downward velocity for fast fall
+        }
+
+        if (input.isPressed('KeyW')) {
             if (this.onGround) {
                 // First jump
                 this.velocityY = this.jumpForce;
@@ -129,7 +155,7 @@ class Player {
             this.meleeAttack();
         }
 
-        if (!this.onGround && this.state !== 'attack' && this.state !== 'melee') {
+        if (!this.onGround && this.state !== 'attack' && this.state !== 'melee' && this.state !== 'run') {
             this.state = 'jump';
         }
 
@@ -214,6 +240,9 @@ class Player {
             case 'walk':
                 animSpeed = 10;
                 break;
+            case 'run':
+                animSpeed = 6;
+                break;
             case 'attack':
                 animSpeed = 8;
                 break;
@@ -232,7 +261,10 @@ class Player {
             this.animTimer = 0;
         }
 
-        if (this.state === 'attack' && this.animFrame > 3) {
+        if (this.state === 'run' && this.animFrame > 0) {
+            this.animFrame = 0;
+        }
+        if (this.state === 'attack' && this.animFrame > 1) {
             this.animFrame = 0;
         }
         if (this.state === 'melee' && this.animFrame > 4) {
@@ -380,10 +412,11 @@ class Player {
             'idle': 'idle',
             'walk': 'walk',
             'jump': 'jump',
-            'attack': 'attack',
+            'attack': 'throw',
             'melee': 'melee',
             'crouch': 'crouch',
             'hurt': 'hurt',
+            'run': 'run',
             'victory': 'victory'
         };
 
