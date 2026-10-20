@@ -147,3 +147,146 @@ class SpriteParser {
         return this.sprites[name] ? 1 : 0;
     }
 }
+
+
+class EnemySpriteParser {
+    constructor() {
+        this.sprites = {};
+        this.image = null;
+    }
+
+    async load() {
+        return new Promise((resolve, reject) => {
+            this.image = new Image();
+            this.image.onload = () => {
+                this.processImage();
+                this.defineSpriteRegions();
+                resolve();
+            };
+            this.image.onerror = reject;
+            this.image.src = ASSETS['enemies'];
+        });
+    }
+
+    processImage() {
+        // Chroma key out the green background
+        const canvas = document.createElement('canvas');
+        canvas.width = this.image.width;
+        canvas.height = this.image.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(this.image, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Bright green background (#00FF00 or close)
+            if (g > 150 && r < 100 && b < 100) {
+                data[i + 3] = 0; // Make transparent
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        this.processedImage = canvas;
+    }
+
+    extractSprite(x, y, w, h) {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(this.processedImage, x, y, w, h, 0, 0, w, h);
+        return canvas;
+    }
+
+    defineSpriteRegions() {
+        // Based on our analysis:
+        // Enemy 1: "CodeBug" (Row 0)
+        this.sprites['CodeBug'] = {
+            'WALK': [
+                this.extractSprite(77, 58, 189, 269),
+                this.extractSprite(297, 58, 185, 267),
+                this.extractSprite(516, 58, 182, 268),
+                this.extractSprite(819, 55, 168, 272)
+            ],
+            'ATTACK': [
+                this.extractSprite(1023, 53, 168, 263),
+                this.extractSprite(1235, 53, 167, 272),
+                this.extractSprite(1443, 58, 186, 265)
+            ],
+            'HIT': [
+                this.extractSprite(1870, 59, 158, 251)
+            ],
+            'DEATH': [
+                this.extractSprite(2113, 60, 158, 251),
+                this.extractSprite(2357, 60, 157, 251),
+                this.extractSprite(2595, 60, 158, 251)
+            ]
+        };
+
+        // Enemy 2: "Error404" (Row 2)
+        this.sprites['Error404'] = {
+            'FLOAT': [
+                this.extractSprite(81, 435, 220, 249),
+                this.extractSprite(333, 436, 188, 251),
+                this.extractSprite(556, 432, 166, 260),
+                this.extractSprite(768, 435, 170, 252)
+            ],
+            'ATTACK': [
+                this.extractSprite(980, 429, 188, 261),
+                this.extractSprite(1209, 433, 177, 255),
+                this.extractSprite(1583, 439, 159, 251)
+            ],
+            'DEATH': [
+                this.extractSprite(1854, 419, 160, 251),
+                this.extractSprite(2136, 428, 159, 250),
+                this.extractSprite(2357, 459, 165, 225)
+            ]
+        };
+
+        // Enemy 3: "SpaghettiCode" (Rows 4, 5, 6)
+        this.sprites['SpaghettiCode'] = {
+            'WALK': [
+                this.extractSprite(89, 807, 300, 247),
+                this.extractSprite(433, 807, 257, 247),
+                this.extractSprite(997, 807, 247, 245)
+            ],
+            'ATTACK': [
+                this.extractSprite(1329, 807, 248, 250),
+                this.extractSprite(1775, 807, 157, 249),
+                this.extractSprite(1214, 1158, 703, 252) // Extended whip attack from row 5
+            ],
+            'HIT': [
+                this.extractSprite(2035, 807, 157, 249)
+            ],
+            'DEATH': [
+                this.extractSprite(2298, 810, 156, 248),
+                this.extractSprite(2588, 803, 159, 247),
+                this.extractSprite(2476, 1252, 333, 165) // Collapsed death pose from row 6
+            ]
+        };
+    }
+
+    getSprite(enemyType, state, frame = 0) {
+        if (this.sprites[enemyType] && this.sprites[enemyType][state]) {
+            const frames = this.sprites[enemyType][state];
+            if (frames && frames.length > 0) {
+                return frames[frame % frames.length];
+            }
+        }
+        return null;
+    }
+
+    getSpriteCount(enemyType, state) {
+        if (this.sprites[enemyType] && this.sprites[enemyType][state]) {
+            return this.sprites[enemyType][state].length;
+        }
+        return 0;
+    }
+}
