@@ -342,3 +342,5 @@ class Player {
         return { x: this.x, y: this.y, width: this.width, height: this.height };
     }
 }
+
+if (typeof module !== 'undefined') module.exports = Player;
