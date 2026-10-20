@@ -50,35 +50,9 @@ class Level {
         return { x: h.x + 10, y: h.y + 12, width: h.width - 20, height: 18 };
     }
 
-    // Fondo con parallax: es un 20 % más grande que la pantalla y se desplaza con la cámara.
-    drawBackground(ctx, backgrounds, camX) {
-        const bg = backgrounds[this.background];
-        if (!bg) {
-            ctx.fillStyle = '#87ceeb';
-            ctx.fillRect(0, 0, 960, 720);
-            return;
-        }
-        const t = this.width > 960 ? camX / (this.width - 960) : 0;
-        // Algunos fondos traen ~28 px de margen blanco a la izquierda
-        ctx.drawImage(bg, 30, 0, bg.width - 30, bg.height, -t * 192, -72, 1152, 864);
-    }
-
     // Capa de mundo: se dibuja con la cámara ya aplicada.
-    draw(ctx, sheet, exitOpen, time) {
-        this.platforms.forEach(p => {
-            ctx.fillStyle = p.moveX ? '#607d8b' : (p.ground ? '#3e2a1e' : '#8b4513');
-            ctx.beginPath();
-            ctx.roundRect(p.x, p.y, p.width, p.height, 4);
-            ctx.fill();
-
-            ctx.fillStyle = p.moveX ? '#90a4ae' : '#a0522d';
-            ctx.fillRect(p.x, p.y, p.width, 4);
-
-            if (p.ground) {
-                ctx.fillStyle = '#228b22';
-                ctx.fillRect(p.x, p.y - 6, p.width, 8);
-            }
-        });
+    draw(ctx, scenery, sheet, exitOpen, time, camX) {
+        scenery.drawPlatforms(ctx, this.platforms, camX);
 
         this.hazards.forEach(h => {
             sheet.draw(ctx, 'mound', 0, h.x + h.width / 2, h.y + 30, h.width / 318);

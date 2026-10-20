@@ -13,6 +13,7 @@ class Game {
 
         this.input = new InputHandler();
         this.backgrounds = {};
+        this.scenery = new Scenery(this.backgrounds);
         this.state = 'loading';
         this.currentLevel = 0;
         this.player = null;
@@ -246,6 +247,7 @@ class Game {
         this.currentLevel = levelIndex;
         this.level = levels[levelIndex];
         this.level.reset();
+        this.scenery.setLevel(this.level);
         this.levelTime = 0;
         this.player = new Player(this.level.spawnX, this.level.spawnY, stats);
         this.levelStartStats = { ...stats };
@@ -336,6 +338,7 @@ class Game {
         const level = this.level;
         const player = this.player;
         level.update(this.levelTime);
+        this.scenery.update(player, this.camX);
         player.update(this.input, level);
         if (player.landed) {
             this.spawnDust(player.x + player.width / 2, player.y + player.height);
@@ -665,12 +668,15 @@ class Game {
             this.drawMenuBackground();
         } else if (this.level) {
             const camX = Math.round(this.camX);
-            this.level.drawBackground(ctx, this.backgrounds, camX);
+            this.scenery.drawBackground(ctx);
 
             ctx.save();
             ctx.translate(-camX, 0);
-            this.level.draw(ctx, this.freddySheet, this.exitOpen, this.levelTime);
+            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, this.levelTime, camX);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
+                const grounded = [...this.collectibles.filter(c => !c.collected), ...this.enemies];
+                if (!this.player.dead) grounded.push(this.player);
+                this.scenery.drawShadows(ctx, grounded, this.level.platforms);
                 this.collectibles.forEach(c => c.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
                 this.enemyProjectiles.forEach(p => p.draw(ctx));
@@ -678,6 +684,7 @@ class Game {
             }
             this.particles.forEach(p => p.draw(ctx));
             ctx.restore();
+            this.scenery.drawForeground(ctx);
 
             if (this.flashAlpha > 0) {
                 ctx.globalAlpha = this.flashAlpha;
