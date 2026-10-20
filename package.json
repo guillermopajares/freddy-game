@@ -1,0 +1,24 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guillermopajares/freddy-game.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/guillermopajares/freddy-game/issues"
+  },
+  "homepage": "https://github.com/guillermopajares/freddy-game#readme",
+  "devDependencies": {
+    "jest": "^30.5.2"
+  }
+}
