@@ -32,11 +32,25 @@ class Game {
     }
 
     async init() {
-        await this.spriteParser.load();
-        this.loadBackgrounds();
-        this.initMenuParticles();
-        this.showMenu();
-        this.gameLoop();
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, 960, 720);
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '24px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Loading Assets...', 480, 360);
+
+        try {
+            await this.loadBackgrounds();
+            this.spriteParser = new SpriteParser();
+            await this.spriteParser.load();
+            this.enemySpriteParser = new EnemySpriteParser();
+            await this.enemySpriteParser.load();
+
+            document.getElementById('overlay').style.display = 'flex';
+        } catch (e) {
+            console.error('Failed to load assets', e);
+            this.ctx.fillText('Error loading assets!', 480, 400);
+        }
     }
 
     loadBackgrounds() {
@@ -173,9 +187,12 @@ class Game {
         this.level = levels[levelIndex];
         this.player = new Player(this.level.spawnX, this.level.spawnY);
 
-        this.enemies = this.level.enemies.map(e =>
-            new Enemy(e.x, e.y, e.type, e)
-        );
+                this.enemies = this.level.enemies.map(e => {
+            if (e.type === 'CodeBug') return new CodeBug(e.x, e.y, e);
+            if (e.type === 'Error404') return new Error404(e.x, e.y, e);
+            if (e.type === 'SpaghettiCode') return new SpaghettiCode(e.x, e.y, e);
+            return new CodeBug(e.x, e.y, e); // Fallback
+        });
 
         this.collectibles = this.level.collectibles.map(c =>
             new Collectible(c.x, c.y, c.type)
@@ -225,7 +242,7 @@ class Game {
         }
 
         this.player.update(this.input, this.level.platforms);
-        this.enemies.forEach(e => e.update(this.player, this.level.platforms));
+        this.enemies.forEach(e => e.update(this.player, this.level.platforms, this.enemySpriteParser));
         this.collectibles.forEach(c => c.update());
 
         const prevEnemyCount = this.enemies.filter(e => e.active).length;
@@ -391,7 +408,7 @@ class Game {
         } else if (this.state === 'playing' || this.state === 'levelComplete') {
             this.level.draw(this.ctx, this.backgrounds);
             this.collectibles.forEach(c => c.draw(this.ctx));
-            this.enemies.forEach(e => e.draw(this.ctx));
+            this.enemies.forEach(e => e.draw(this.ctx, this.enemySpriteParser));
             this.player.draw(this.ctx, this.spriteParser);
             this.particles.forEach(p => p.draw(this.ctx));
 
