@@ -43,7 +43,7 @@ class Projectile {
         this.y += this.velocityY;
         this.lifetime--;
 
-        if (this.lifetime <= 0 || this.x < -60 || this.x > 1020 || this.y > 760) {
+        if (this.lifetime <= 0 || this.y > 760) {
             this.active = false;
         }
     }

@@ -1,4 +1,7 @@
 const STEP = 1000 / 60; // la física va a 60 Hz aunque la pantalla refresque a 120 Hz
+const STAR_TYPES = new Set(['coin', 'star', 'heart']); // lo que cuenta para las estrellas del nivel
+const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
+const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
 
 class Game {
     constructor() {
@@ -23,11 +26,15 @@ class Game {
         this.menuParticles = [];
         this.screenShake = { x: 0, y: 0, intensity: 0 };
         this.flashAlpha = 0;
+        this.hitstop = 0;
+        this.camX = 0;
         this.banner = null; // { text, timer }
         this.boss = null;
         this.pendingBoss = null;
+        this.combo = 0;
+        this.comboTimer = 0;
         this.levelTime = 0;
-        this.highScore = this.loadHighScore();
+        this.progress = this.loadProgress();
 
         this.overlay = document.getElementById('overlay');
         this.overlayTitle = document.getElementById('overlay-title');
@@ -37,6 +44,11 @@ class Game {
         this.overlayScore = document.getElementById('overlay-score');
         this.overlayDivider = document.getElementById('overlay-divider');
         this.controlsInfo = document.getElementById('controls-info');
+
+        // Cambiar de pestaña o ventana pausa el juego
+        window.addEventListener('blur', () => {
+            if (this.state === 'playing') this.state = 'paused';
+        });
     }
 
     async init() {
@@ -57,6 +69,9 @@ class Game {
             this.ctx.fillText('Error cargando los sprites', 480, 400);
             return;
         }
+        Object.keys(ENEMY_FRAMES)
+            .filter(name => name.startsWith('bug_') || name.startsWith('e404_'))
+            .forEach(name => this.enemySheet.addTint(name, `${name}_elite`, ELITE_TINT));
 
         this.initMenuParticles();
         this.showMenu();
@@ -73,20 +88,26 @@ class Game {
         });
     }
 
-    loadHighScore() {
+    // Progreso: niveles desbloqueados, mejores estrellas/tiempo por nivel y récord de puntos.
+    loadProgress() {
         try {
-            return Number(localStorage.getItem('freddyHighScore')) || 0;
-        } catch (e) {
-            return 0;
-        }
+            const saved = JSON.parse(localStorage.getItem('freddyProgress'));
+            if (saved && saved.unlocked) return saved;
+        } catch (e) { /* almacenamiento no disponible */ }
+        return { unlocked: 1, best: {}, highScore: 0 };
     }
 
-    saveHighScore(score) {
-        if (score <= this.highScore) return;
-        this.highScore = score;
+    saveProgress() {
         try {
-            localStorage.setItem('freddyHighScore', String(score));
-        } catch (e) { /* almacenamiento bloqueado: solo se pierde el récord */ }
+            localStorage.setItem('freddyProgress', JSON.stringify(this.progress));
+        } catch (e) { /* almacenamiento bloqueado: solo se pierde el progreso */ }
+    }
+
+    recordScore(score) {
+        if (score > this.progress.highScore) {
+            this.progress.highScore = score;
+            this.saveProgress();
+        }
     }
 
     initMenuParticles() {
@@ -119,7 +140,11 @@ class Game {
 
     showMenu() {
         this.state = 'menu';
-        this.showOverlay('', 'FREDDY GAME', 'Pulsa ENTER para empezar', this.highScore ? `Récord: ${this.highScore}` : '');
+        Sound.music(null);
+        const { unlocked, highScore } = this.progress;
+        const pick = unlocked > 1 ? ` · 1-${unlocked}: elegir nivel` : '';
+        this.showOverlay('', 'FREDDY GAME', `Pulsa ENTER para empezar${pick}`,
+            highScore ? `Récord: ${highScore} · Niveles: ${unlocked}/${levels.length}` : '');
         this.overlaySubtitle.style.display = 'block';
         this.overlaySubtitle.textContent = 'Desatasca el código';
         this.controlsInfo.style.display = 'grid';
@@ -127,9 +152,20 @@ class Game {
 
     showLevelComplete() {
         this.state = 'levelComplete';
-        this.showOverlay('level-complete-title', '¡NIVEL SUPERADO!', 'Pulsa ENTER para seguir', `Puntos: ${this.player.score}`);
+        Sound.music(null);
+        Sound.play('portal');
+
         const stars = this.collectedCount >= this.totalCollectibles ? 3 :
                       this.collectedCount >= this.totalCollectibles * 0.6 ? 2 : 1;
+        const time = this.levelTime / 60;
+        const best = this.progress.best[this.currentLevel] || { stars: 0, time: Infinity };
+        this.progress.best[this.currentLevel] = { stars: Math.max(best.stars, stars), time: Math.min(best.time, time) };
+        this.progress.unlocked = Math.min(levels.length, Math.max(this.progress.unlocked, this.currentLevel + 2));
+        this.recordScore(this.player.score);
+        this.saveProgress();
+
+        this.showOverlay('level-complete-title', '¡NIVEL SUPERADO!', 'Pulsa ENTER para cruzar el portal',
+            `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(Math.min(best.time, time))})`);
         this.overlayStars.innerHTML = Array(3).fill(0).map((_, i) =>
             `<span class="${i < stars ? 'star-filled' : 'star-empty'}">★</span>`
         ).join('');
@@ -137,21 +173,25 @@ class Game {
 
     showGameOver() {
         this.state = 'gameOver';
-        this.saveHighScore(this.player.score);
-        this.showOverlay('game-over-title', 'GAME OVER', 'Pulsa ENTER para reintentar',
-            `Puntos: ${this.player.score} · Récord: ${this.highScore}`);
+        Sound.music(null);
+        Sound.play('gameOver');
+        this.recordScore(this.player.score);
+        this.showOverlay('game-over-title', 'GAME OVER', 'Pulsa ENTER para volver al menú',
+            `Puntos: ${this.player.score} · Récord: ${this.progress.highScore}`);
     }
 
     showVictory() {
         this.state = 'victory';
-        this.saveHighScore(this.player.score);
+        Sound.music(null);
+        Sound.play('victory');
+        this.recordScore(this.player.score);
         this.showOverlay('victory-title', '¡HAS GANADO!', 'Pulsa ENTER para volver a jugar',
-            `Puntos: ${this.player.score} · Récord: ${this.highScore}`);
+            `Puntos: ${this.player.score} · Récord: ${this.progress.highScore}`);
         this.overlayStars.innerHTML = '<span class="star-filled">★★★★★</span>';
 
         for (let i = 0; i < 50; i++) {
             this.particles.push({
-                x: Math.random() * 960,
+                x: this.camX + Math.random() * 960,
                 y: -20,
                 vx: (Math.random() - 0.5) * 4,
                 vy: Math.random() * 3 + 2,
@@ -209,21 +249,24 @@ class Game {
         this.levelTime = 0;
         this.player = new Player(this.level.spawnX, this.level.spawnY, stats);
         this.levelStartStats = { ...stats };
+        this.camX = 0;
 
         this.enemies = this.level.enemies.map(e => new ENEMY_TYPES[e.type](e.x, e.y, e));
         this.enemyProjectiles = [];
         this.boss = null;
         this.pendingBoss = this.level.boss;
+        this.combo = 0;
+        this.comboTimer = 0;
 
         this.collectibles = this.level.collectibles.map(c => new Collectible(c.x, c.y, c.type));
-        // El papel es munición, no cuenta para las estrellas
-        this.totalCollectibles = this.collectibles.filter(c => c.type !== 'paper').length;
+        this.totalCollectibles = this.collectibles.filter(c => STAR_TYPES.has(c.type)).length;
         this.collectedCount = 0;
         this.particles = [];
 
         this.state = 'playing';
         this.overlay.classList.add('hidden');
         this.announce(this.level.name);
+        Sound.music('level');
         this.updateHUD();
     }
 
@@ -232,7 +275,8 @@ class Game {
     }
 
     handleInput() {
-        if (this.input.isPressed('Enter')) {
+        const input = this.input;
+        if (input.isPressed('Enter')) {
             if (this.state === 'menu') {
                 this.startLevel(0);
             } else if (this.state === 'gameOver' || this.state === 'victory') {
@@ -242,12 +286,22 @@ class Game {
             }
         }
 
-        if (this.input.isPressed('Escape')) {
+        if (this.state === 'menu') {
+            for (let i = 1; i <= this.progress.unlocked; i++) {
+                if (input.isPressed(`Digit${i}`)) this.startLevel(i - 1);
+            }
+        }
+
+        if (input.isPressed('Escape')) {
             if (this.state === 'playing') this.state = 'paused';
             else if (this.state === 'paused') this.state = 'playing';
         }
 
-        if (this.input.isPressed('KeyR') && (this.state === 'playing' || this.state === 'paused')) {
+        if (input.isPressed('KeyM')) {
+            this.announce(Sound.toggleMute() ? 'SONIDO: NO' : 'SONIDO: SÍ');
+        }
+
+        if (input.isPressed('KeyR') && (this.state === 'playing' || this.state === 'paused')) {
             this.startLevel(this.currentLevel, this.levelStartStats);
         }
     }
@@ -257,6 +311,12 @@ class Game {
     }
 
     update() {
+        this.input.poll();
+        // Micro-pausa al acertar: congela la acción unos frames; las pulsaciones esperan.
+        if (this.state === 'playing' && this.hitstop > 0) {
+            this.hitstop--;
+            return;
+        }
         this.handleInput();
 
         if (this.state === 'menu') {
@@ -273,30 +333,38 @@ class Game {
         }
 
         this.levelTime++;
-        this.level.update(this.levelTime);
+        const level = this.level;
         const player = this.player;
-        player.update(this.input, this.level.platforms);
-        this.enemies.forEach(e => e.update(player, this.level.platforms, this));
+        level.update(this.levelTime);
+        player.update(this.input, level);
+        if (player.landed) {
+            this.spawnDust(player.x + player.width / 2, player.y + player.height);
+            Sound.play('land');
+        }
+        this.enemies.forEach(e => e.update(player, level, this));
         this.enemyProjectiles.forEach(p => p.update());
         this.collectibles.forEach(c => c.update());
 
         this.handlePlayerAttacks();
         this.handleDamageToPlayer();
         this.handleCollectibles();
+        this.handleCheckpoints();
         this.updateBossFight();
 
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
         this.enemyProjectiles = this.enemyProjectiles.filter(p => p.active);
+        if (this.comboTimer > 0 && --this.comboTimer === 0) this.combo = 0;
 
         if (player.dead) {
             if (player.deathTimer > 120) this.showGameOver();
         } else if (this.exitOpen && Collision.aabb(player.getBounds(), {
-            x: this.level.exitX, y: this.level.exitY, width: this.level.exitWidth, height: this.level.exitHeight
+            x: level.exitX, y: level.exitY, width: level.exitWidth, height: level.exitHeight
         })) {
             player.score += 50 * player.lives;
             this.showLevelComplete();
         }
 
+        this.updateCamera();
         this.particles.forEach(p => p.update());
         this.particles = this.particles.filter(p => p.life > 0);
         if (this.banner && --this.banner.timer <= 0) this.banner = null;
@@ -318,18 +386,36 @@ class Game {
         this.input.clear();
     }
 
-    hitEnemy(enemy, damage, color) {
-        const killed = enemy.takeDamage(damage);
+    // La cámara sigue a Freddy mirando un poco hacia delante; en la arena del jefe queda fija.
+    updateCamera() {
+        const level = this.level;
+        const target = this.player.x + this.player.width / 2 - 480 + this.player.facing * 80;
+        const max = level.width - 960;
+        const clamped = Math.max(level.leftWall, Math.min(max, target));
+        this.camX += (clamped - this.camX) * 0.1;
+        this.camX = Math.max(0, Math.min(max, this.camX));
+    }
+
+    hitEnemy(enemy, damage, color, fromX) {
+        const killed = enemy.takeDamage(damage, fromX);
         const cx = enemy.x + enemy.width / 2;
         const cy = enemy.y + enemy.height / 2;
         this.spawnParticles(cx, cy, color);
-        if (!killed) return;
+        this.hitstop = Math.max(this.hitstop, killed ? 6 : 3);
+        if (!killed) {
+            Sound.play('hit');
+            return;
+        }
 
-        this.player.score += enemy.score;
-        this.spawnText(cx, enemy.y, `+${enemy.score}`);
+        Sound.play('kill');
+        this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
+        this.comboTimer = 180;
+        const points = enemy.score * Math.min(this.combo, 5);
+        this.player.score += points;
+        this.spawnText(cx, enemy.y, this.combo > 1 ? `+${points} x${this.combo}` : `+${points}`);
         this.triggerScreenShake(enemy.isBoss ? 16 : 5);
-        // Los bugs a veces sueltan papel
-        if (!enemy.isBoss && Math.random() < 0.35) {
+        // Los bugs a veces sueltan papel; el 404 devuelve lo que robó
+        if (!enemy.isBoss && (enemy.carrying || Math.random() < 0.35)) {
             this.collectibles.push(new Collectible(cx - 14, enemy.y + enemy.height - 34, 'paper'));
         }
     }
@@ -344,7 +430,7 @@ class Game {
                 if (!Collision.aabb(proj.getBounds(), enemy.getBounds())) return;
                 proj.hits.add(enemy);
                 if (!proj.pierce) proj.active = false;
-                this.hitEnemy(enemy, proj.damage, '#ff6b35');
+                this.hitEnemy(enemy, proj.damage, '#ff6b35', proj.x - proj.velocityX * 10);
             });
         });
 
@@ -354,7 +440,7 @@ class Game {
                 if (enemy.dying || player.meleeHits.has(enemy)) return;
                 if (!Collision.aabb(melee, enemy.getBounds())) return;
                 player.meleeHits.add(enemy);
-                this.hitEnemy(enemy, 2, '#c0392b');
+                this.hitEnemy(enemy, player.meleeDamage, '#c0392b', player.x + player.width / 2);
             });
             // El desatascador devuelve al vacío los píxeles y babas
             this.enemyProjectiles.forEach(p => {
@@ -362,6 +448,7 @@ class Game {
                     p.active = false;
                     player.score += 10;
                     this.spawnParticles(p.x, p.y, '#fff');
+                    Sound.play('hit');
                 }
             });
         }
@@ -371,17 +458,19 @@ class Game {
         const player = this.player;
         if (player.dead) return;
         const bounds = player.getBounds();
-        const hurt = (fromX) => {
-            if (!player.takeDamage(1, fromX)) return;
-            this.spawnParticles(player.x + player.width / 2, player.y + player.height / 2, '#e74c3c');
-            this.triggerScreenShake(8);
+        const hurt = (fromX, heavy) => {
+            if (!player.takeDamage(1, fromX, heavy)) return;
+            this.combo = 0;
+            this.comboTimer = 0;
+            this.spawnParticles(player.x + player.width / 2, player.y + player.height / 2, heavy ? '#6d4c41' : '#e74c3c');
+            this.triggerScreenShake(heavy ? 12 : 8);
             this.triggerFlash();
         };
 
         this.enemies.forEach(enemy => {
             if (enemy.dying) return;
             const attack = enemy.getAttackBounds();
-            if (attack && Collision.aabb(bounds, attack)) hurt(enemy.x + enemy.width / 2);
+            if (attack && Collision.aabb(bounds, attack)) hurt(enemy.x + enemy.width / 2, true);
             if (!Collision.aabb(bounds, enemy.getBounds())) return;
 
             // Pisotón: caer sobre el enemigo le hace daño y rebota.
@@ -390,16 +479,17 @@ class Game {
                 player.velocityY = -9;
                 player.invincibleTimer = Math.max(player.invincibleTimer, 12);
                 player.jumpsLeft = player.maxJumps - 1;
+                Sound.play('stomp');
                 this.hitEnemy(enemy, 1, '#ffd700');
                 return;
             }
-            hurt(enemy.x + enemy.width / 2);
+            hurt(enemy.x + enemy.width / 2, enemy.heavy);
         });
 
         this.enemyProjectiles.forEach(p => {
             if (p.active && Collision.aabb(bounds, p.getBounds())) {
                 p.active = false;
-                hurt(p.x);
+                hurt(p.x, p.type === 'goo');
             }
         });
 
@@ -415,42 +505,69 @@ class Game {
     }
 
     handleCollectibles() {
+        const player = this.player;
         this.collectibles.forEach(c => {
-            if (c.collected || !Collision.aabb(this.player.getBounds(), c.getBounds())) return;
+            if (c.collected || !Collision.aabb(player.getBounds(), c.getBounds())) return;
             c.collected = true;
-            this.player.score += c.value;
-            if (c.type === 'heart' && this.player.lives < 5) this.player.lives++;
+            player.score += c.value;
+            if (STAR_TYPES.has(c.type)) this.collectedCount++;
+
+            if (c.type === 'heart' && player.lives < 5) player.lives++;
             if (c.type === 'paper') {
-                this.player.ammo = Math.min(this.player.maxAmmo, this.player.ammo + 5);
+                player.ammo = Math.min(player.maxAmmo, player.ammo + 5);
                 this.spawnText(c.x, c.y, '+5 🧻');
+                Sound.play('paper');
+            } else if (POWER_TYPES.has(c.type)) {
+                if (c.type === 'shield') player.shield = true;
+                else player.powers[c.type] = POWER_TIME;
+                this.spawnText(c.x, c.y, { triple: '¡PAPEL TRIPLE!', gold: '¡DESATASCADOR DORADO!', shield: '¡ESCUDO!' }[c.type]);
+                Sound.play('power');
             } else {
-                this.collectedCount++;
+                Sound.play('coin');
             }
             this.spawnParticles(c.x + c.width / 2, c.y + c.height / 2, '#ffd700');
         });
     }
 
-    // El jefe aparece cuando ya no quedan enemigos normales; la salida se abre al vencerlo.
+    handleCheckpoints() {
+        const player = this.player;
+        this.level.checkpoints.forEach(c => {
+            if (c.reached || player.dead || Math.abs(player.x + player.width / 2 - c.x) > 30) return;
+            c.reached = true;
+            player.spawnX = c.x - player.width / 2;
+            player.spawnY = c.y - player.baseHeight - 10;
+            this.spawnText(c.x, c.y - 80, 'CHECKPOINT');
+            Sound.play('checkpoint');
+        });
+    }
+
+    // Al entrar en la arena se cierra la pared izquierda y aparece el jefe; la salida se abre al vencerlo.
     updateBossFight() {
-        if (this.pendingBoss && this.enemies.length === 0) {
+        const level = this.level;
+        if (this.pendingBoss && this.player.x > this.pendingBoss.arenaX + 60) {
             const b = this.pendingBoss;
             this.pendingBoss = null;
-            this.boss = new ENEMY_TYPES[b.type](b.x, b.y);
+            level.leftWall = b.arenaX;
+            this.boss = new ENEMY_TYPES[b.type](b.x, b.y, b);
             this.enemies.push(this.boss);
             this.announce(`¡JEFE: ${this.boss.name}!`);
             this.triggerScreenShake(10);
+            Sound.play('boss');
+            Sound.music('boss');
         }
         if (!this.boss) return;
 
         if (this.boss.markedForDeletion) {
             this.boss = null;
-            this.announce('¡SALIDA DESBLOQUEADA!');
+            this.announce('¡PORTAL ABIERTO!');
+            Sound.music('level');
             return;
         }
         // Reabastecimiento: cae papel cada 6 s si no hay paquetes a la vista.
         if (this.levelTime % 360 === 0 && !this.collectibles.some(c => c.type === 'paper' && !c.collected)) {
-            const p = this.level.platforms[Math.floor(Math.random() * this.level.platforms.length)];
-            this.collectibles.push(new Collectible(p.baseX + p.width / 2 - 14, p.y - 34, 'paper'));
+            const arena = level.platforms.filter(p => p.baseX >= level.leftWall && !p.moveX);
+            const p = arena[Math.floor(Math.random() * arena.length)];
+            this.collectibles.push(new Collectible(p.x + p.width / 2 - 14, p.y - 34, 'paper'));
         }
     }
 
@@ -469,13 +586,13 @@ class Game {
         });
     }
 
-    spawnParticles(x, y, color) {
-        for (let i = 0; i < 10; i++) {
+    spawnParticles(x, y, color, count = 10, spread = 10) {
+        for (let i = 0; i < count; i++) {
             this.particles.push({
                 x,
                 y,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10 - 2,
+                vx: (Math.random() - 0.5) * spread,
+                vy: (Math.random() - 0.5) * spread - 2,
                 life: 40,
                 color,
                 size: Math.random() * 5 + 2,
@@ -495,6 +612,10 @@ class Game {
                 }
             });
         }
+    }
+
+    spawnDust(x, y) {
+        this.spawnParticles(x, y - 4, 'rgba(200, 180, 150, 0.8)', 8, 6);
     }
 
     spawnText(x, y, text) {
@@ -519,10 +640,17 @@ class Game {
     }
 
     updateHUD() {
-        if (!this.player) return;
-        document.getElementById('lives').textContent = '❤️'.repeat(this.player.lives);
-        document.getElementById('score').textContent = `Puntos: ${this.player.score}`;
-        document.getElementById('ammo').textContent = `🧻 ${this.player.ammo}`;
+        const player = this.player;
+        if (!player) return;
+        const powers = [
+            player.shield ? '🛡️' : '',
+            player.powers.triple > 0 ? `🧻x3 ${Math.ceil(player.powers.triple / 60)}s` : '',
+            player.powers.gold > 0 ? `🪠 ${Math.ceil(player.powers.gold / 60)}s` : '',
+        ].filter(Boolean).join(' ');
+        document.getElementById('lives').textContent = '❤️'.repeat(player.lives);
+        document.getElementById('score').textContent = `Puntos: ${player.score}`;
+        document.getElementById('ammo').textContent = `🧻 ${player.ammo}`;
+        document.getElementById('power').textContent = powers;
         document.getElementById('level').textContent = `NIVEL ${this.currentLevel + 1}`;
         document.getElementById('collectibles').textContent = `★ ${this.collectedCount}/${this.totalCollectibles}`;
     }
@@ -536,7 +664,12 @@ class Game {
         if (this.state === 'menu') {
             this.drawMenuBackground();
         } else if (this.level) {
-            this.level.draw(ctx, this.backgrounds, this.freddySheet, this.exitOpen);
+            const camX = Math.round(this.camX);
+            this.level.drawBackground(ctx, this.backgrounds, camX);
+
+            ctx.save();
+            ctx.translate(-camX, 0);
+            this.level.draw(ctx, this.freddySheet, this.exitOpen, this.levelTime);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
                 this.collectibles.forEach(c => c.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
@@ -544,6 +677,7 @@ class Game {
                 this.player.draw(ctx, this.freddySheet);
             }
             this.particles.forEach(p => p.draw(ctx));
+            ctx.restore();
 
             if (this.flashAlpha > 0) {
                 ctx.globalAlpha = this.flashAlpha;
@@ -552,6 +686,7 @@ class Game {
                 ctx.globalAlpha = 1;
             }
             if (this.boss) this.drawBossBar();
+            if (this.combo > 1) this.drawCombo();
             if (this.banner) this.drawBanner();
             if (this.state === 'paused') this.drawPause();
         }
@@ -574,6 +709,20 @@ class Game {
         ctx.fillRect(x, y, w, 10);
         ctx.fillStyle = this.boss.phase === 2 ? '#e91e63' : '#8bc34a';
         ctx.fillRect(x, y, w * (this.boss.health / this.boss.maxHealth), 10);
+    }
+
+    drawCombo() {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.comboTimer / 30);
+        ctx.font = `bold ${22 + Math.min(this.combo, 5) * 3}px sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#000';
+        ctx.fillStyle = '#ff9800';
+        ctx.strokeText(`COMBO x${this.combo}`, 940, 110);
+        ctx.fillText(`COMBO x${this.combo}`, 940, 110);
+        ctx.restore();
     }
 
     drawBanner() {
@@ -599,7 +748,7 @@ class Game {
         ctx.textAlign = 'center';
         ctx.fillText('PAUSA', 480, 340);
         ctx.font = '20px sans-serif';
-        ctx.fillText('ESC para seguir · R para reiniciar el nivel', 480, 385);
+        ctx.fillText('ESC para seguir · R para reiniciar el nivel · M para el sonido', 480, 385);
     }
 
     drawMenuBackground() {
@@ -655,4 +804,9 @@ class Game {
         this.draw();
         requestAnimationFrame(t => this.gameLoop(t));
     }
+}
+
+function formatTime(seconds) {
+    const s = Math.floor(seconds);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }

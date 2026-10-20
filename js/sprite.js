@@ -18,6 +18,8 @@ const FREDDY_FRAMES = {
     throw: [[1796, 794, 116, 260, 42], [2034, 802, 128, 252, 50], [2298, 802, 138, 252, 44]],
     hurt: [[162, 1162, 138, 254], [420, 1150, 206, 266]],
     knock: [[1598, 1166, 244, 246]],
+    downed: [[820, 1140, 342, 272], [1206, 1130, 342, 284]],
+    land: [[1594, 464, 106, 228]],
     death: [[2106, 1312, 288, 98]],
     mound: [[1754, 592, 318, 106]],
 };
@@ -31,7 +33,7 @@ const ENEMY_FRAMES = {
     bug_attack: [[818, 54, 168, 274], [1022, 52, 170, 264], [1234, 52, 168, 274], [1442, 58, 188, 264]],
     e404_idle: [[1858, 54, 180, 256], [2110, 60, 174, 252], [2344, 54, 184, 258], [2582, 60, 180, 252]],
     e404_throw: [[1850, 412, 176, 258], [2136, 428, 160, 252]],
-    e404_hurt: [[2574, 792, 174, 258]],
+    e404_steal: [[1760, 802, 184, 254], [2020, 802, 184, 254], [2282, 804, 184, 254]],
     e404_death: [[2356, 458, 166, 226], [2560, 440, 240, 260]],
     spider_walk: [[88, 806, 306, 252]],
     spider_spit: [[428, 806, 284, 252, 110], [994, 806, 262, 252, 105], [1326, 806, 260, 252, 105]],
@@ -103,6 +105,21 @@ class SpriteSheet {
             };
             img.onerror = reject;
             img.src = this.src;
+        });
+    }
+
+    // Variante coloreada de una animación (enemigos élite).
+    addTint(name, tintedName, color) {
+        this.frames[tintedName] = this.frames[name].map(f => {
+            const canvas = document.createElement('canvas');
+            canvas.width = f.canvas.width;
+            canvas.height = f.canvas.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(f.canvas, 0, 0);
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            return { canvas, anchorX: f.anchorX };
         });
     }
 

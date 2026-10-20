@@ -45,6 +45,8 @@ class Collectible {
             this.drawHeart(ctx, 0, 0, 12);
         } else if (this.type === 'paper') {
             this.drawPaperPack(ctx);
+        } else {
+            this.drawPower(ctx);
         }
 
         ctx.restore();
@@ -65,6 +67,29 @@ class Collectible {
             ctx.arc(x, y, 2.5, 0, Math.PI * 2);
             ctx.fill();
         });
+    }
+
+    // Objetos de poder: burbuja con icono.
+    drawPower(ctx) {
+        const pulse = 1 + Math.sin(this.bobOffset * 3) * 0.08;
+        const colors = { triple: '#7fdbff', gold: '#ffd700', shield: '#64b5f6' };
+        ctx.scale(pulse, pulse);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.strokeStyle = colors[this.type];
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText({ triple: '🧻', gold: '🪠', shield: '🛡️' }[this.type], 0, 1);
+        if (this.type === 'triple') {
+            ctx.fillStyle = '#7fdbff';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('x3', 10, 11);
+        }
     }
 
     drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {

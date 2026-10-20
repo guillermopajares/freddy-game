@@ -7,16 +7,18 @@ class Enemy {
         this.y = y;
         this.width = opts.width;
         this.height = opts.height;
-        this.health = opts.health;
-        this.maxHealth = opts.health;
+        this.elite = !!opts.elite; // élite: tintado rojo, doble de vida y más agresivo
+        this.health = opts.health * (this.elite ? 2 : 1);
+        this.maxHealth = this.health;
         this.scale = opts.scale;
         this.anims = opts.anims;
         this.animSpeeds = opts.animSpeeds || {};
-        this.score = opts.score;
+        this.score = opts.score * (this.elite ? 2 : 1);
         this.damage = 1;
 
         this.velocityX = 0;
         this.velocityY = 0;
+        this.knockX = 0;
         this.onGround = false;
         this.ground = null;
         this.gravity = true;
@@ -29,6 +31,7 @@ class Enemy {
         this.dying = false;
         this.markedForDeletion = false;
         this.isBoss = false;
+        this.heavy = false; // sus golpes derriban a Freddy
         this.mirror = true; // false = de frente, no se voltea (el texto 404 saldría al revés)
     }
 
@@ -39,11 +42,14 @@ class Enemy {
         }
     }
 
-    // Devuelve true si el golpe lo mata.
-    takeDamage(amount) {
+    // Devuelve true si el golpe lo mata. fromX: de dónde viene el golpe (retroceso).
+    takeDamage(amount, fromX) {
         if (this.dying) return false;
         this.health -= amount;
         this.hitTimer = 12;
+        if (!this.isBoss && fromX !== undefined) {
+            this.knockX = (this.x + this.width / 2 < fromX ? -1 : 1) * 4;
+        }
         if (this.health <= 0) {
             this.health = 0;
             this.dying = true;
@@ -56,7 +62,7 @@ class Enemy {
         return false;
     }
 
-    update(player, platforms, game) {
+    update(player, level, game) {
         this.stateTime++;
         if (this.hitTimer > 0) this.hitTimer--;
 
@@ -67,21 +73,23 @@ class Enemy {
             this.velocityX = 0;
             if (!this.gravity) this.velocityY = 0;
         } else {
-            this.think(player, platforms, game);
+            this.think(player, level, game);
         }
 
         const wantedX = this.velocityX;
         if (this.gravity) this.velocityY += 0.5;
-        this.x += this.velocityX;
+        this.x += this.velocityX + this.knockX;
         this.y += this.velocityY;
+        this.knockX = Math.abs(this.knockX) < 0.3 ? 0 : this.knockX * 0.8;
         if (this.gravity) {
-            Collision.checkPlatformCollisions(this, platforms);
+            Collision.checkPlatformCollisions(this, level.platforms);
             if (this.ground && this.ground.vx) this.x += this.ground.vx;
         }
         if (wantedX !== 0 && this.velocityX === 0) this.facing = -this.facing; // pared
 
-        if (this.x < 0 || this.x > 960 - this.width) {
-            this.x = Math.max(0, Math.min(960 - this.width, this.x));
+        const maxX = level.width - this.width;
+        if (this.x < 0 || this.x > maxX) {
+            this.x = Math.max(0, Math.min(maxX, this.x));
             this.facing = this.x <= 0 ? 1 : -1;
         }
         if (this.y > 800) this.markedForDeletion = true;
@@ -114,10 +122,12 @@ class Enemy {
                 sx - size / 2, sy - size / 2, Math.cos(a), 'pixel', Math.sin(a) * PROJECTILE_TYPES.pixel.speed
             ));
         }
+        Sound.play('enemyShot');
     }
 
     getFrame(sheet) {
-        const name = this.anims[this.state] || this.anims.walk;
+        let name = this.anims[this.state] || this.anims.walk;
+        if (this.elite) name += '_elite';
         const count = sheet.count(name) || 1;
         const i = Math.floor(this.stateTime / (this.animSpeeds[this.state] || 8));
         return [name, ONE_SHOT.has(this.state) ? Math.min(i, count - 1) : i % count];
@@ -165,22 +175,23 @@ class Enemy {
 class CodeBug extends Enemy {
     constructor(x, y, opts = {}) {
         super(x, y, {
-            width: 40, height: 72, health: opts.health || 2, scale: 0.3, score: 100,
+            width: 40, height: 72, health: opts.health || 2, scale: 0.3, score: 100, elite: opts.elite,
             anims: { walk: 'bug_walk', run: 'bug_run', attack: 'bug_attack' },
             animSpeeds: { walk: 10, run: 5, attack: 9 },
         });
+        this.speedMul = this.elite ? 1.4 : 1;
     }
 
-    think(player, platforms) {
+    think(player, level) {
         if (this.cooldown > 0) this.cooldown--;
         const dx = player.x + player.width / 2 - (this.x + this.width / 2);
         const sameLevel = Math.abs(player.y + player.height - (this.y + this.height)) < 50;
 
         if (this.state === 'attack') {
-            this.velocityX = this.stateTime > 18 ? 4.5 * this.facing : 0; // amago y embestida
+            this.velocityX = this.stateTime > 18 ? 4.5 * this.speedMul * this.facing : 0; // amago y embestida
             if (this.stateTime >= 36) {
                 this.setState('walk');
-                this.cooldown = 60;
+                this.cooldown = this.elite ? 35 : 60;
             }
         } else if (sameLevel && Math.abs(dx) < 90 && this.cooldown === 0) {
             this.facePlayer(player);
@@ -189,26 +200,26 @@ class CodeBug extends Enemy {
         } else if (sameLevel && Math.abs(dx) < 280) {
             this.facePlayer(player);
             this.setState('run');
-            this.velocityX = 2.2 * this.facing;
+            this.velocityX = 2.2 * this.speedMul * this.facing;
         } else {
             this.setState('walk');
-            this.velocityX = this.facing;
+            this.velocityX = this.speedMul * this.facing;
         }
 
-        if (this.onGround && !this.groundAhead(platforms)) {
+        if (this.onGround && !this.groundAhead(level.platforms)) {
             if (this.state === 'walk') this.facing = -this.facing;
             this.velocityX = 0;
         }
     }
 }
 
-// Flota y lanza píxeles muertos apuntados a Freddy.
+// Flota y lanza píxeles muertos apuntados a Freddy. Si ve papel en el suelo, va a robarlo.
 class Error404 extends Enemy {
     constructor(x, y, opts = {}) {
         super(x, y, {
-            width: 44, height: 72, health: opts.health || 2, scale: 0.3, score: 150,
-            anims: { walk: 'e404_idle', throw: 'e404_throw', death: 'e404_death' },
-            animSpeeds: { walk: 12, throw: 12, death: 20 },
+            width: 44, height: 72, health: opts.health || 2, scale: 0.3, score: 150, elite: opts.elite,
+            anims: { walk: 'e404_idle', throw: 'e404_throw', steal: 'e404_steal', death: 'e404_death' },
+            animSpeeds: { walk: 12, throw: 12, steal: 10, death: 20 },
         });
         this.gravity = false;
         this.mirror = false;
@@ -216,33 +227,76 @@ class Error404 extends Enemy {
         this.floatPhase = Math.random() * Math.PI * 2;
         this.range = opts.range || 320;
         this.cooldown = 60 + Math.floor(Math.random() * 60);
+        this.carrying = false;
     }
 
-    think(player, platforms, game) {
+    think(player, level, game) {
         if (this.cooldown > 0) this.cooldown--;
         this.floatPhase += 0.05;
         this.velocityY = this.baseY + Math.sin(this.floatPhase) * 16 - this.y;
-        const dx = this.facePlayer(player);
 
+        if (this.state !== 'throw' && this.trySteal(game)) return;
+
+        const dx = this.facePlayer(player);
         if (this.state === 'throw') {
             this.velocityX = 0;
-            if (this.stateTime === 12) this.shoot(player, game);
+            if (this.stateTime === 12) this.shoot(player, game, this.elite ? 3 : 1, 0.2);
             if (this.stateTime >= 24) this.setState('walk');
         } else if (Math.hypot(dx, player.y - this.y) < this.range) {
+            this.setState('walk');
             this.velocityX = Math.abs(dx) > 120 ? 0.8 * this.facing : 0;
             if (this.cooldown === 0) {
                 this.setState('throw');
-                this.cooldown = 140;
+                this.cooldown = this.elite ? 100 : 140;
             }
         } else {
+            this.setState('walk');
             this.velocityX = 0;
         }
     }
+
+    trySteal(game) {
+        if (this.carrying) return false;
+        const loot = game.collectibles.find(c =>
+            c.type === 'paper' && !c.collected && Math.abs(c.x - this.x) < 260 && Math.abs(c.y - this.y) < 260
+        );
+        if (!loot) return false;
+
+        this.setState('steal');
+        const dx = loot.x + loot.width / 2 - (this.x + this.width / 2);
+        this.facing = Math.sign(dx) || this.facing;
+        this.velocityX = Math.abs(dx) > 4 ? 1.8 * this.facing : 0;
+        this.baseY += (loot.y + loot.height - this.height - this.baseY) * 0.05;
+        if (Collision.aabb(this.getBounds(), loot.getBounds())) {
+            loot.collected = true;
+            this.carrying = true;
+            this.setState('walk');
+            game.spawnText(this.x + this.width / 2, this.y, '¡ROBADO!');
+            Sound.play('steal');
+        }
+        return true;
+    }
+
+    draw(ctx, sheet) {
+        super.draw(ctx, sheet);
+        if (!this.carrying || this.dying) return;
+        // Rollo robado sobre la cabeza
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#999';
+        ctx.beginPath();
+        ctx.arc(this.x + this.width / 2, this.y - 6, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#d4a574';
+        ctx.beginPath();
+        ctx.arc(this.x + this.width / 2, this.y - 6, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
 }
 
-// Jefe del nivel 3: barre la pantalla por arriba disparando abanicos; a media vida invoca bugs.
+// Jefe del nivel 3: barre la arena por arriba disparando abanicos; a media vida invoca bugs.
 class Boss404 extends Error404 {
-    constructor(x, y) {
+    constructor(x, y, opts = {}) {
         super(x, y, { health: 30 });
         this.width = 100;
         this.height = 170;
@@ -250,22 +304,24 @@ class Boss404 extends Error404 {
         this.score = 2000;
         this.isBoss = true;
         this.name = 'ERROR 404 GIGANTE';
+        this.arenaX = opts.arenaX || 0;
         this.phase = 1;
         this.sweep = 0;
         this.cooldown = 90;
     }
 
-    think(player, platforms, game) {
+    think(player, level, game) {
         if (this.cooldown > 0) this.cooldown--;
         if (this.phase === 1 && this.health <= this.maxHealth / 2) {
             this.phase = 2;
             game.announce('¡ERROR 404 SE CABREA!');
-            game.spawnEnemy(new CodeBug(60, 100));
-            game.spawnEnemy(new CodeBug(860, 100));
+            Sound.play('bossPhase');
+            game.spawnEnemy(new CodeBug(this.arenaX + 60, 100));
+            game.spawnEnemy(new CodeBug(this.arenaX + 860, 100));
         }
 
         this.sweep += this.phase === 1 ? 0.01 : 0.017;
-        const targetX = 480 - this.width / 2 + Math.sin(this.sweep) * 340;
+        const targetX = this.arenaX + 480 - this.width / 2 + Math.sin(this.sweep) * 340;
         this.velocityX = (targetX - this.x) * 0.05;
         this.velocityY = this.baseY + Math.sin(this.sweep * 4) * 30 - this.y;
         this.facePlayer(player);
@@ -290,18 +346,20 @@ class BossSpider extends Enemy {
             animSpeeds: { walk: 8, spit: 12, transform: 6, whip: 9, death: 40 },
         });
         this.isBoss = true;
+        this.heavy = true;
         this.name = 'BUG ARAÑA';
         this.phase = 1;
         this.cooldown = 90;
     }
 
-    think(player, platforms, game) {
+    think(player, level, game) {
         if (this.cooldown > 0) this.cooldown--;
 
         if (this.phase === 1 && this.health <= this.maxHealth / 2 && this.state !== 'transform') {
             this.setState('transform');
             game.announce('¡SE CONVIERTE EN CÓDIGO ESPAGUETI!');
             game.triggerScreenShake(14);
+            Sound.play('bossPhase');
         }
 
         if (this.state === 'transform') {
@@ -321,6 +379,7 @@ class BossSpider extends Enemy {
                 game.enemyProjectiles.push(new Projectile(
                     mouthX, this.y + this.height * 0.35, this.facing * (0.5 + Math.random() * 0.9), 'goo', -5 - Math.random() * 3
                 ));
+                Sound.play('goo');
             }
             if (this.stateTime >= 36) {
                 this.setState('walk');
@@ -339,7 +398,7 @@ class BossSpider extends Enemy {
 
         const dx = this.facePlayer(player);
         this.velocityX = (this.phase === 1 ? 1.2 : 2.4) * this.facing;
-        if (this.onGround && !this.groundAhead(platforms)) this.velocityX = 0;
+        if (this.onGround && !this.groundAhead(level.platforms)) this.velocityX = 0;
         if (this.cooldown === 0) {
             this.setState(this.phase === 2 && Math.abs(dx) < 230 ? 'whip' : 'spit');
         }
