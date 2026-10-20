@@ -2,6 +2,16 @@ const STEP = 1000 / 60; // la física va a 60 Hz aunque la pantalla refresque a 
 const STAR_TYPES = new Set(['coin', 'star', 'heart']); // lo que cuenta para las estrellas del nivel
 const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
 const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
+const BACKGROUNDS = ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'];
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+}
 
 class Game {
     constructor() {
@@ -53,18 +63,19 @@ class Game {
     }
 
     async init() {
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, 960, 720);
-        this.ctx.fillStyle = '#fff';
-        this.ctx.font = '24px sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Cargando...', 480, 360);
-
+        this.drawLoading(0);
         try {
-            this.loadBackgrounds();
-            this.freddySheet = new SpriteSheet(ASSETS.freddy, FREDDY_FRAMES);
-            this.enemySheet = new SpriteSheet(ASSETS.enemies, ENEMY_FRAMES);
-            await Promise.all([this.freddySheet.load(), this.enemySheet.load()]);
+            const sources = await this.assetSources();
+            const total = Object.keys(sources).length;
+            let loaded = 0;
+            const done = () => this.drawLoading(++loaded / total);
+            this.freddySheet = new SpriteSheet(sources.freddy, FREDDY_FRAMES);
+            this.enemySheet = new SpriteSheet(sources.enemies, ENEMY_FRAMES);
+            await Promise.all([
+                ...BACKGROUNDS.map(name => loadImage(sources[name]).then(img => { this.backgrounds[name] = img; done(); })),
+                this.freddySheet.load().then(done),
+                this.enemySheet.load().then(done),
+            ]);
         } catch (e) {
             console.error('Failed to load assets', e);
             this.ctx.fillText('Error cargando los sprites', 480, 400);
@@ -81,12 +92,32 @@ class Game {
         requestAnimationFrame(t => this.gameLoop(t));
     }
 
-    loadBackgrounds() {
-        ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'].forEach(name => {
-            const img = new Image();
-            img.onload = () => { this.backgrounds[name] = img; };
-            img.src = ASSETS[name];
+    // Por http se cargan los ficheros sueltos (en paralelo y cacheables). Con file:// el
+    // navegador no deja leer sus píxeles, así que se usa la versión embebida js/assets.js.
+    async assetSources() {
+        if (location.protocol !== 'file:') return ASSET_FILES;
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'js/assets.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
         });
+        return ASSETS;
+    }
+
+    drawLoading(fraction) {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#0f0c29';
+        ctx.fillRect(0, 0, 960, 720);
+        ctx.fillStyle = '#fff';
+        ctx.font = '24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Cargando...', 480, 340);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(330, 370, 300, 12);
+        ctx.fillStyle = '#7CFC00';
+        ctx.fillRect(330, 370, 300 * fraction, 12);
     }
 
     // Progreso: niveles desbloqueados, mejores estrellas/tiempo por nivel y récord de puntos.
