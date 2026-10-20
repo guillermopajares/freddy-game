@@ -44,6 +44,8 @@ class Player {
         this.meleeHits = new Set();
         this.projectiles = [];
         this.landed = false; // aterrizaje fuerte este frame (el juego pone polvo y sonido)
+        this.respawned = false; // ha caído al vacío y reaparecido este frame
+        this.hitsTaken = 0;
         this.dead = false;
         this.deathTimer = 0;
         this.tick = 0;
@@ -88,6 +90,7 @@ class Player {
         this.x = Math.max(level.leftWall, Math.min(level.width - this.width, this.x));
 
         this.landed = this.onGround && !wasOnGround && fallSpeed > 9;
+        this.respawned = false;
         if (this.landed && !this.action && !this.dead) this.action = { name: 'land', timer: 8, duration: 8 };
 
         this.projectiles.forEach(p => p.update());
@@ -103,6 +106,7 @@ class Player {
                 this.y = this.spawnY;
                 this.velocityX = 0;
                 this.velocityY = 0;
+                this.respawned = true;
             }
         }
     }
@@ -250,6 +254,7 @@ class Player {
         }
 
         this.lives = Math.max(0, this.lives - amount);
+        this.hitsTaken++;
         this.invincibleTimer = heavy ? 110 : 90;
         this.action = heavy ? { name: 'downed', timer: 50, duration: 50 } : { name: 'hurt', timer: 24, duration: 24 };
         this.velocityX = dir * (heavy ? 3 : 5);
@@ -343,3 +348,5 @@ class Player {
         return { x: this.x, y: this.y, width: this.width, height: this.height };
     }
 }
+
+if (typeof module !== 'undefined') module.exports = Player;

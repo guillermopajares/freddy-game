@@ -59,8 +59,11 @@ class Enemy {
             return true;
         }
         if (!this.isBoss) this.stun = 12;
+        this.onHit();
         return false;
     }
+
+    onHit() {}
 
     update(player, level, game) {
         this.stateTime++;
@@ -87,10 +90,12 @@ class Enemy {
         }
         if (wantedX !== 0 && this.velocityX === 0) this.facing = -this.facing; // pared
 
-        const maxX = level.width - this.width;
-        if (this.x < 0 || this.x > maxX) {
-            this.x = Math.max(0, Math.min(maxX, this.x));
-            this.facing = this.x <= 0 ? 1 : -1;
+        // Los jefes no salen de su arena (arenaX lo pone el juego al invocarlos)
+        const minX = this.arenaX || 0;
+        const maxX = (this.arenaX ? this.arenaX + 960 : level.width) - this.width;
+        if (this.x < minX || this.x > maxX) {
+            this.x = Math.max(minX, Math.min(maxX, this.x));
+            this.facing = this.x <= minX ? 1 : -1;
         }
         if (this.y > 800) this.markedForDeletion = true;
     }
@@ -172,18 +177,31 @@ class Enemy {
 }
 
 // Patrulla; si ve a Freddy a su altura corre hacia él y se lanza a morder.
+// small = cría de la araña: diminuta, 1 golpe.
 class CodeBug extends Enemy {
     constructor(x, y, opts = {}) {
+        const small = !!opts.small;
         super(x, y, {
-            width: 40, height: 72, health: opts.health || 2, scale: 0.3, score: 100, elite: opts.elite,
+            width: small ? 26 : 40, height: small ? 44 : 72, health: small ? 1 : opts.health || 2,
+            scale: small ? 0.18 : 0.3, score: small ? 50 : 100, elite: opts.elite,
             anims: { walk: 'bug_walk', run: 'bug_run', attack: 'bug_attack' },
             animSpeeds: { walk: 10, run: 5, attack: 9 },
         });
-        this.speedMul = this.elite ? 1.4 : 1;
+        this.small = small;
+        this.speedMul = this.elite ? 1.4 : small ? 1.3 : 1;
+        this.jumpCooldown = 0;
+    }
+
+    canJumpTo(player, dx) {
+        const rise = this.y + this.height - (player.y + player.height);
+        return this.onGround && this.jumpCooldown === 0 && !player.dead &&
+            rise > 50 && rise < 170 && Math.abs(dx) < 170;
     }
 
     think(player, level) {
         if (this.cooldown > 0) this.cooldown--;
+        if (this.jumpCooldown > 0) this.jumpCooldown--;
+        if (!this.onGround) return; // en el aire mantiene la trayectoria del salto
         const dx = player.x + player.width / 2 - (this.x + this.width / 2);
         const sameLevel = Math.abs(player.y + player.height - (this.y + this.height)) < 50;
 
@@ -201,6 +219,14 @@ class CodeBug extends Enemy {
             this.facePlayer(player);
             this.setState('run');
             this.velocityX = 2.2 * this.speedMul * this.facing;
+        } else if (this.canJumpTo(player, dx)) {
+            // Freddy está en una plataforma justo encima: salta a por él
+            this.facePlayer(player);
+            this.setState('run');
+            this.velocityY = -11;
+            this.velocityX = 2.5 * this.facing;
+            this.jumpCooldown = 90;
+            return;
         } else {
             this.setState('walk');
             this.velocityX = this.speedMul * this.facing;
@@ -218,7 +244,7 @@ class Error404 extends Enemy {
     constructor(x, y, opts = {}) {
         super(x, y, {
             width: 44, height: 72, health: opts.health || 2, scale: 0.3, score: 150, elite: opts.elite,
-            anims: { walk: 'e404_idle', throw: 'e404_throw', steal: 'e404_steal', death: 'e404_death' },
+            anims: { walk: 'e404_idle', throw: 'e404_throw', steal: 'e404_steal', glitch: 'e404_idle', death: 'e404_death' },
             animSpeeds: { walk: 12, throw: 12, steal: 10, death: 20 },
         });
         this.gravity = false;
@@ -230,8 +256,33 @@ class Error404 extends Enemy {
         this.carrying = false;
     }
 
+    // El élite se teletransporta al recibir un golpe (a veces).
+    onHit() {
+        if (this.elite && Math.random() < 0.5) {
+            this.startGlitch(this.x + (Math.random() < 0.5 ? -170 : 170), this.baseY);
+        }
+    }
+
+    // Teletransporte con fallo gráfico: parpadea, salta a (x, y) a mitad de animación.
+    startGlitch(x, y) {
+        this.glitchTarget = { x, y };
+        this.setState('glitch');
+        Sound.play('glitch');
+    }
+
+    updateGlitch() {
+        this.velocityX = 0;
+        this.velocityY = 0;
+        if (this.stateTime === 10) {
+            this.x = this.glitchTarget.x;
+            this.y = this.baseY = this.glitchTarget.y;
+        }
+        if (this.stateTime >= 20) this.setState('walk');
+    }
+
     think(player, level, game) {
         if (this.cooldown > 0) this.cooldown--;
+        if (this.state === 'glitch') return this.updateGlitch();
         this.floatPhase += 0.05;
         this.velocityY = this.baseY + Math.sin(this.floatPhase) * 16 - this.y;
 
@@ -270,6 +321,7 @@ class Error404 extends Enemy {
         if (Collision.aabb(this.getBounds(), loot.getBounds())) {
             loot.collected = true;
             this.carrying = true;
+            game.stolen = true;
             this.setState('walk');
             game.spawnText(this.x + this.width / 2, this.y, '¡ROBADO!');
             Sound.play('steal');
@@ -278,6 +330,14 @@ class Error404 extends Enemy {
     }
 
     draw(ctx, sheet) {
+        if (this.state === 'glitch' && this.stateTime % 4 < 2) {
+            // Fallo gráfico: copias desplazadas y semitransparentes
+            const [name, frame] = this.getFrame(sheet);
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            [-7, 7].forEach(off => sheet.draw(ctx, name, frame, this.x + this.width / 2 + off, this.y + this.height, this.scale, 1));
+            ctx.restore();
+        }
         super.draw(ctx, sheet);
         if (!this.carrying || this.dying) return;
         // Rollo robado sobre la cabeza
@@ -304,6 +364,7 @@ class Boss404 extends Error404 {
         this.score = 2000;
         this.isBoss = true;
         this.name = 'ERROR 404 GIGANTE';
+        this.achievement = 'boss404';
         this.arenaX = opts.arenaX || 0;
         this.phase = 1;
         this.sweep = 0;
@@ -348,6 +409,8 @@ class BossSpider extends Enemy {
         this.isBoss = true;
         this.heavy = true;
         this.name = 'BUG ARAÑA';
+        this.achievement = 'bossFinal';
+        this.actions = 0;
         this.phase = 1;
         this.cooldown = 90;
     }
@@ -400,7 +463,16 @@ class BossSpider extends Enemy {
         this.velocityX = (this.phase === 1 ? 1.2 : 2.4) * this.facing;
         if (this.onGround && !this.groundAhead(level.platforms)) this.velocityX = 0;
         if (this.cooldown === 0) {
-            this.setState(this.phase === 2 && Math.abs(dx) < 230 ? 'whip' : 'spit');
+            this.actions++;
+            // Fase 1: cada tercera acción suelta crías en vez de escupir
+            const brood = this.phase === 1 && this.actions % 3 === 0 && game.enemies.filter(e => e.small && !e.dying).length < 4;
+            if (brood) {
+                for (const side of [-1, 1]) game.spawnEnemy(new CodeBug(this.x + this.width / 2 + side * 40, this.y + 40, { small: true }));
+                game.spawnText(this.x + this.width / 2, this.y, '¡CRÍAS!');
+                this.cooldown = 100;
+            } else {
+                this.setState(this.phase === 2 && Math.abs(dx) < 230 ? 'whip' : 'spit');
+            }
         }
     }
 
@@ -443,4 +515,127 @@ class BossSpider extends Enemy {
     }
 }
 
-const ENEMY_TYPES = { CodeBug, Error404, Boss404, BossSpider };
+// Minijefe del nivel 2: un bug enorme que embiste y salta para aplastar; a media vida llama a sus crías.
+class BossBug extends Enemy {
+    constructor(x, y) {
+        super(x, y, {
+            width: 90, height: 150, health: 24, scale: 0.6, score: 1500,
+            anims: { walk: 'bug_walk', run: 'bug_run', attack: 'bug_attack', charge: 'bug_run', jump: 'bug_attack' },
+            animSpeeds: { walk: 10, run: 4, attack: 8, charge: 4 },
+        });
+        this.isBoss = true;
+        this.heavy = true;
+        this.name = 'REY BUG';
+        this.achievement = 'bossKing';
+        this.phase = 1;
+        this.cooldown = 90;
+        this.actions = 0;
+    }
+
+    think(player, level, game) {
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.phase === 1 && this.health <= this.maxHealth / 2) {
+            this.phase = 2;
+            game.announce('¡EL REY LLAMA A SU CORTE!');
+            Sound.play('bossPhase');
+        }
+
+        if (this.state === 'attack') { // amago antes de embestir
+            this.velocityX = 0;
+            if (this.stateTime >= 30) this.setState('charge');
+            return;
+        }
+        if (this.state === 'charge') {
+            this.velocityX = 7 * this.facing;
+            if (this.stateTime >= 45 || (this.onGround && !this.groundAhead(level.platforms))) this.endAction();
+            return;
+        }
+        if (this.state === 'jump') {
+            if (this.onGround && this.stateTime > 5) {
+                // Aterrizaje: onda de choque si Freddy está en el suelo cerca
+                game.triggerScreenShake(14);
+                Sound.play('stomp');
+                if (player.onGround && Math.abs(player.x - this.x) < 220) {
+                    game.hurtPlayer(this.x + this.width / 2, true);
+                }
+                this.endAction();
+            }
+            return;
+        }
+
+        const dx = this.facePlayer(player);
+        this.setState('walk');
+        this.velocityX = (this.phase === 1 ? 1.3 : 1.9) * this.facing;
+        if (this.onGround && !this.groundAhead(level.platforms)) this.velocityX = 0;
+        if (this.cooldown > 0) return;
+
+        this.actions++;
+        if (this.phase === 2 && this.actions % 3 === 0 && game.enemies.filter(e => e.small && !e.dying).length < 4) {
+            for (const side of [-1, 1]) game.spawnEnemy(new CodeBug(this.x + this.width / 2 + side * 50, this.y + 60, { small: true }));
+            this.cooldown = 90;
+        } else if (Math.abs(dx) > 250 || this.actions % 2) {
+            this.setState('attack');
+        } else {
+            this.setState('jump');
+            this.velocityY = -13;
+            this.velocityX = Math.max(-5, Math.min(5, dx / 40));
+        }
+    }
+
+    endAction() {
+        this.setState('walk');
+        this.velocityX = 0;
+        this.cooldown = this.phase === 1 ? 90 : 60;
+    }
+}
+
+// Minijefe del nivel 4: un 404 inestable que se teletransporta por la arena y dispara ráfagas.
+class BossGlitch extends Error404 {
+    constructor(x, y, opts = {}) {
+        super(x, y, { health: 26, elite: false });
+        this.width = 64;
+        this.height = 110;
+        this.scale = 0.45;
+        this.score = 1800;
+        this.isBoss = true;
+        this.name = 'GLITCH 404';
+        this.achievement = 'bossGlitch';
+        this.arenaX = opts.arenaX || 0;
+        this.phase = 1;
+        this.cooldown = 60;
+        this.burst = 0;
+    }
+
+    onHit() {}
+
+    think(player, level, game) {
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.phase === 1 && this.health <= this.maxHealth / 2) {
+            this.phase = 2;
+            game.announce('¡SE DUPLICA!');
+            Sound.play('bossPhase');
+            for (const side of [-1, 1]) game.spawnEnemy(new Error404(this.x + side * 120, this.baseY, { elite: true }));
+        }
+        if (this.state === 'glitch') return this.updateGlitch();
+
+        this.floatPhase += 0.05;
+        this.velocityY = this.baseY + Math.sin(this.floatPhase) * 12 - this.y;
+        this.velocityX = 0;
+        this.facePlayer(player);
+
+        // Ráfaga: tres disparos seguidos tras cada teletransporte
+        if (this.burst > 0 && this.stateTime % 10 === 0) {
+            this.shoot(player, game, this.phase === 1 ? 1 : 2, 0.25);
+            this.burst--;
+        }
+        if (this.cooldown === 0) {
+            const x = Math.max(this.arenaX + 40, Math.min(this.arenaX + 960 - this.width - 40,
+                player.x + (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 120)));
+            this.startGlitch(x, 220 + Math.random() * 220);
+            this.burst = 3;
+            this.cooldown = this.phase === 1 ? 110 : 75;
+        }
+    }
+}
+
+const ENEMY_TYPES = { CodeBug, Error404, Boss404, BossSpider, BossBug, BossGlitch };
