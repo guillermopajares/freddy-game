@@ -1,464 +1,279 @@
+const PLAYER_SCALE = 0.4;
+const CHARGE_TIME = 45; // frames manteniendo el disparo para el rollo gigante
+const ANIM_SPEED = { idle: 30, walk: 7, run: 4 };
+
 class Player {
-    constructor(x, y) {
+    constructor(x, y, stats = {}) {
+        this.spawnX = x;
+        this.spawnY = y;
         this.x = x;
         this.y = y;
         this.width = 40;
         this.height = 108;
         this.baseHeight = 108;
-        this.crouchHeight = 72;
+        this.crouchHeight = 80;
         this.velocityX = 0;
         this.velocityY = 0;
         this.speed = 3.5;
         this.jumpForce = -12;
         this.onGround = false;
+        this.ground = null;
         this.facing = 1;
-        this.lives = 3;
-        this.score = 0;
-        this.invincible = false;
+
+        this.lives = stats.lives ?? 3;
+        this.score = stats.score ?? 0;
+        this.ammo = stats.ammo ?? 10;
+        this.maxAmmo = 20;
+
         this.invincibleTimer = 0;
         this.crouching = false;
         this.dashTimer = 0;
         this.dashCooldown = 0;
-        this.dashSpeed = 8;
-
-        this.state = 'idle';
-        this.animFrame = 0;
-        this.animTimer = 0;
-        this.attackCooldown = 0;
-        this.attackDuration = 0;
-
+        this.dashSpeed = 9;
         this.wallJumpLockout = 0;
         this.touchingWall = 0;
         this.maxJumps = 2;
         this.jumpsLeft = 2;
+
+        this.attackCooldown = 0;
+        this.action = null; // { name: 'throw' | 'melee' | 'hurt', timer, duration }
+        this.charge = 0;
+        this.meleeHits = new Set();
         this.projectiles = [];
-        this.meleeSwing = null;
+        this.dead = false;
+        this.deathTimer = 0;
+        this.tick = 0;
+    }
+
+    get invincible() {
+        return this.invincibleTimer > 0 || this.dashTimer > 0 || this.dead;
     }
 
     update(input, platforms) {
-        if (this.invincibleTimer > 0) {
-            this.invincibleTimer--;
-            this.invincible = this.invincibleTimer > 0;
-        }
-
+        this.tick++;
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
         if (this.attackCooldown > 0) this.attackCooldown--;
-        if (this.attackDuration > 0) {
-            this.attackDuration--;
-            if (this.attackDuration === 0) {
-                if (this.state === 'attack' || this.state === 'melee') {
-                    this.state = 'idle';
-                }
-                this.meleeSwing = null;
-            }
-        }
-
-        const wasCrouching = this.crouching;
-        this.crouching = input.isDown('KeyS') && this.onGround;
-
         if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.action && --this.action.timer <= 0) this.action = null;
 
-        if (input.isPressed('ShiftLeft') && this.dashCooldown === 0 && !this.crouching) {
-            this.dashTimer = 15; // 15 frames of dashing
-            this.dashCooldown = 60; // 60 frames cooldown
-        }
-
-        if (this.dashTimer > 0) {
-            this.dashTimer--;
-            this.velocityX = this.dashSpeed * this.facing;
-            this.velocityY = 0; // Lock vertical movement
-            this.state = 'run';
-        } else if (this.crouching) {
-            this.velocityX = 0;
+        if (this.dead) {
+            this.deathTimer++;
+            this.velocityX *= 0.9;
         } else {
-            if (this.wallJumpLockout > 0) {
-                this.wallJumpLockout--;
-            } else {
-                if (input.isDown('KeyA')) {
-                    this.velocityX = -this.speed;
-                    this.facing = -1;
-                    if (this.onGround) this.state = 'walk';
-                } else if (input.isDown('KeyD')) {
-                    this.velocityX = this.speed;
-                    this.facing = 1;
-                    if (this.onGround) this.state = 'walk';
-                } else {
-                    // Friction/stopping
-                    if (this.onGround) {
-                        this.velocityX = 0;
-                        if (this.state !== 'attack' && this.state !== 'melee') {
-                            this.state = 'idle';
-                        }
-                    } else {
-                        // Air friction
-                        this.velocityX *= 0.9;
-                        if (Math.abs(this.velocityX) < 0.5) this.velocityX = 0;
-                    }
-                }
-            }
-        } else {
-            if (wasCrouching) {
-                this.y -= this.baseHeight - this.crouchHeight;
-            }
-            this.height = this.baseHeight;
-
-            if (this.wallJumpLockout > 0) {
-                this.wallJumpLockout--;
-            } else if (input.isDown('KeyA')) {
-                this.velocityX = -this.speed;
-                this.facing = -1;
-                if (this.onGround) this.state = 'walk';
-            } else if (input.isDown('KeyD')) {
-                this.velocityX = this.speed;
-                this.facing = 1;
-                if (this.onGround) this.state = 'walk';
-            } else {
-                this.velocityX = 0;
-                if (this.onGround && this.state !== 'attack' && this.state !== 'melee') {
-                    this.state = 'idle';
-                }
-            }
-
-            // Fast fall
-        if (!this.onGround && input.isPressed('KeyS')) {
-            this.velocityY = 15; // Increased downward velocity for fast fall
-        }
-
-        if (input.isPressed('KeyW')) {
-            if (this.onGround) {
-                // First jump
-                this.velocityY = this.jumpForce;
-                this.onGround = false;
-                this.state = 'jump';
-                this.jumpsLeft = this.maxJumps - 1;
-            } else if (this.touchingWall !== 0) {
-                // Wall jump
-                this.velocityY = this.jumpForce * 0.9;
-                this.velocityX = -this.touchingWall * this.speed * 1.5;
-                this.wallJumpLockout = 15; // Lock horizontal input for a few frames
-                this.facing = -this.touchingWall;
-                this.state = 'jump';
-                this.jumpsLeft = this.maxJumps - 1;
-            } else if (this.jumpsLeft > 0) {
-                // Double jump
-                this.velocityY = this.jumpForce * 0.8;
-                this.state = 'jump';
-                this.jumpsLeft--;
-            }
-        }
-        }
-
-        if (input.isPressed('Space') || input.isPressed('KeyP')) {
-            this.rangedAttack();
-        }
-
-        if (input.isPressed('KeyF')) {
-            this.meleeAttack();
-        }
-
-        if (!this.onGround && this.state !== 'attack' && this.state !== 'melee' && this.state !== 'run') {
-            this.state = 'jump';
+            this.handleInput(input);
         }
 
         this.velocityY += 0.5;
         this.x += this.velocityX;
         this.y += this.velocityY;
-
         Collision.checkPlatformCollisions(this, platforms);
-
-        this.updateAnimation();
+        if (this.ground && this.ground.vx) this.x += this.ground.vx;
+        this.x = Math.max(0, Math.min(960 - this.width, this.x));
 
         this.projectiles.forEach(p => p.update());
         this.projectiles = this.projectiles.filter(p => p.active);
 
-        if (this.meleeSwing) {
-            this.meleeSwing.timer--;
-            if (this.meleeSwing.timer <= 0) {
-                this.meleeSwing = null;
+        if (this.y > 760 && !this.dead) {
+            this.invincibleTimer = 0;
+            this.dashTimer = 0;
+            this.takeDamage(1, this.x);
+            if (!this.dead) {
+                this.x = this.spawnX;
+                this.y = this.spawnY;
+                this.velocityX = 0;
+                this.velocityY = 0;
+            }
+        }
+    }
+
+    handleInput(input) {
+        const left = input.isDown('KeyA') || input.isDown('ArrowLeft');
+        const right = input.isDown('KeyD') || input.isDown('ArrowRight');
+        const down = input.isDown('KeyS') || input.isDown('ArrowDown');
+        const hurt = this.action && this.action.name === 'hurt';
+
+        const crouch = down && this.onGround && !hurt;
+        if (crouch !== this.crouching) {
+            const dh = this.baseHeight - this.crouchHeight;
+            this.y += crouch ? dh : -dh;
+            this.height = crouch ? this.crouchHeight : this.baseHeight;
+            this.crouching = crouch;
+        }
+
+        if ((input.isPressed('ShiftLeft') || input.isPressed('ShiftRight')) && this.dashCooldown === 0 && !crouch && !hurt) {
+            this.dashTimer = 14;
+            this.dashCooldown = 50;
+        }
+
+        if (this.dashTimer > 0) {
+            this.dashTimer--;
+            this.velocityX = this.dashSpeed * this.facing;
+            this.velocityY = 0;
+        } else if (hurt) {
+            this.velocityX *= 0.92;
+        } else if (this.wallJumpLockout > 0) {
+            this.wallJumpLockout--;
+        } else if (crouch) {
+            this.velocityX = 0;
+        } else {
+            const dir = (right ? 1 : 0) - (left ? 1 : 0);
+            const speed = this.charge > 0 ? this.speed * 0.6 : this.speed;
+            if (dir) {
+                this.velocityX = dir * speed;
+                this.facing = dir;
+            } else if (this.onGround) {
+                this.velocityX = 0;
+            } else {
+                this.velocityX *= 0.9;
+                if (Math.abs(this.velocityX) < 0.5) this.velocityX = 0;
             }
         }
 
-        if (this.y > 800) {
-            this.takeDamage(1);
-            this.x = 100;
-            this.y = 100;
-            this.velocityY = 0;
+        if (hurt) return;
+
+        // Caída rápida
+        if (!this.onGround && (input.isPressed('KeyS') || input.isPressed('ArrowDown'))) {
+            this.velocityY = 15;
+        }
+
+        if (input.isPressed('KeyW') || input.isPressed('ArrowUp')) {
+            if (this.onGround) {
+                this.velocityY = this.jumpForce;
+                this.onGround = false;
+                this.jumpsLeft = this.maxJumps - 1;
+            } else if (this.touchingWall !== 0) {
+                this.velocityY = this.jumpForce * 0.9;
+                this.velocityX = -this.touchingWall * this.speed * 1.5;
+                this.wallJumpLockout = 15;
+                this.facing = -this.touchingWall;
+                this.jumpsLeft = this.maxJumps - 1;
+            } else if (this.jumpsLeft > 0) {
+                this.velocityY = this.jumpForce * 0.8;
+                this.jumpsLeft--;
+            }
+        }
+
+        // Papel: pulsar = rollo normal; mantener CHARGE_TIME frames = rollo gigante que atraviesa.
+        const fireHeld = input.isDown('Space') || input.isDown('KeyP');
+        const firePressed = input.isPressed('Space') || input.isPressed('KeyP');
+        if ((fireHeld || firePressed) && this.ammo > 0 && this.attackCooldown === 0) {
+            this.charge++;
+        }
+        if (!fireHeld && this.charge > 0) {
+            this.throwPaper(this.charge >= CHARGE_TIME);
+            this.charge = 0;
+        }
+
+        if (input.isPressed('KeyF') && this.attackCooldown === 0) {
+            this.charge = 0;
+            this.attackCooldown = 26;
+            this.action = { name: 'melee', timer: 22, duration: 22 };
+            this.meleeHits.clear();
         }
     }
 
-    rangedAttack() {
-        if (this.attackCooldown > 0 || this.crouching) return;
+    throwPaper(big) {
+        const cost = big ? 3 : 1;
+        if (this.ammo < cost) big = false;
+        this.ammo -= big ? 3 : 1;
+        this.attackCooldown = big ? 30 : 16;
+        this.action = { name: 'throw', timer: 14, duration: 14 };
 
-        this.state = 'attack';
-        this.attackCooldown = 30;
-        this.attackDuration = 18;
-
-        const projX = this.facing === 1 ? this.x + this.width : this.x - 28;
-        const projY = this.y + this.height / 2 - 14;
-        this.projectiles.push(new Projectile(projX, projY, this.facing, 'paper'));
+        const size = big ? PROJECTILE_TYPES.paperBig.width : PROJECTILE_TYPES.paper.width;
+        const projX = this.facing === 1 ? this.x + this.width : this.x - size;
+        const projY = this.y + this.height * 0.55 - size / 2;
+        this.projectiles.push(new Projectile(projX, projY, this.facing, big ? 'paperBig' : 'paper'));
     }
 
-    meleeAttack() {
-        if (this.attackCooldown > 0) return;
-
-        this.state = 'melee';
-        this.attackCooldown = 30;
-        this.attackDuration = 28;
-
-        this.meleeSwing = {
-            timer: 28,
-            maxTimer: 28,
-            facing: this.facing,
-            pivotX: this.facing === 1 ? this.x + this.width - 5 : this.x + 5,
-            pivotY: this.y + this.height * 0.35,
-            length: 55,
-            activeFrames: [4, 18]
-        };
-    }
-
+    // Golpe del desatascador: activo en la parte central del swing, por delante de Freddy.
     getMeleeBounds() {
-        if (!this.meleeSwing) return null;
-
-        const progress = 1 - (this.meleeSwing.timer / this.meleeSwing.maxTimer);
-        const angle = -Math.PI * 0.75 + progress * Math.PI * 1.5;
-
-        const tipX = this.meleeSwing.pivotX + Math.cos(angle) * this.meleeSwing.length * this.meleeSwing.facing;
-        const tipY = this.meleeSwing.pivotY + Math.sin(angle) * this.meleeSwing.length;
-
+        if (!this.action || this.action.name !== 'melee') return null;
+        const progress = 1 - this.action.timer / this.action.duration;
+        if (progress < 0.25 || progress > 0.85) return null;
+        const reach = 75;
         return {
-            x: Math.min(this.meleeSwing.pivotX, tipX) - 15,
-            y: Math.min(this.meleeSwing.pivotY, tipY) - 15,
-            width: Math.abs(tipX - this.meleeSwing.pivotX) + 30,
-            height: Math.abs(tipY - this.meleeSwing.pivotY) + 30
+            x: this.facing === 1 ? this.x + this.width - 5 : this.x - reach + 5,
+            y: this.y + 20,
+            width: reach,
+            height: this.height - 20,
         };
     }
 
-    updateAnimation() {
-        this.animTimer++;
-        let animSpeed;
+    // Devuelve true si el golpe ha entrado.
+    takeDamage(amount, fromX) {
+        if (this.invincible) return false;
 
-        switch (this.state) {
-            case 'walk':
-                animSpeed = 10;
-                break;
-            case 'run':
-                animSpeed = 6;
-                break;
-            case 'attack':
-                animSpeed = 8;
-                break;
-            case 'melee':
-                animSpeed = 6;
-                break;
-            case 'jump':
-                animSpeed = 18;
-                break;
-            default:
-                animSpeed = 14;
-        }
-
-        if (this.animTimer >= animSpeed) {
-            this.animFrame++;
-            this.animTimer = 0;
-        }
-
-        if (this.state === 'run' && this.animFrame > 0) {
-            this.animFrame = 0;
-        }
-        if (this.state === 'attack' && this.animFrame > 1) {
-            this.animFrame = 0;
-        }
-        if (this.state === 'melee' && this.animFrame > 4) {
-            this.animFrame = 0;
-        }
-    }
-
-    takeDamage(amount) {
-        if (this.invincible) return;
-
-        this.lives -= amount;
-        this.invincible = true;
-        this.invincibleTimer = 60;
-        this.state = 'hurt';
+        this.lives = Math.max(0, this.lives - amount);
+        this.invincibleTimer = 90;
+        this.charge = 0;
+        this.dashTimer = 0;
+        this.action = { name: 'hurt', timer: 24, duration: 24 };
+        this.velocityX = (this.x + this.width / 2 < fromX ? -1 : 1) * 5;
         this.velocityY = -6;
 
-        if (this.lives <= 0) this.lives = 0;
+        if (this.lives === 0) {
+            this.dead = true;
+            this.action = null;
+        }
+        return true;
     }
 
-    draw(ctx, spriteParser) {
+    getAnimation() {
+        if (this.dead) return this.deathTimer < 30 ? 'knock' : 'death';
+        if (this.charge > 0) return 'throw';
+        if (this.action) return this.action.name;
+        if (this.dashTimer > 0) return 'run';
+        if (this.crouching) return 'crouch';
+        if (!this.onGround) return this.velocityY < 0 ? 'jump' : 'fall';
+        if (this.velocityX !== 0) return 'walk';
+        return 'idle';
+    }
+
+    draw(ctx, sheet) {
         this.projectiles.forEach(p => p.draw(ctx));
 
-        ctx.save();
-
-        if (this.invincible && Math.floor(Date.now() / 100) % 2 === 0) {
-            ctx.globalAlpha = 0.5;
-        }
-
-        const sprite = this.getSprite(this.state, this.animFrame, spriteParser);
-
-        if (sprite) {
-            if (this.facing === -1) {
-                ctx.translate(this.x + this.width, this.y);
-                ctx.scale(-1, 1);
-                ctx.drawImage(sprite, 0, 0, this.width, this.height);
-            } else {
-                ctx.drawImage(sprite, this.x, this.y, this.width, this.height);
-            }
+        const name = this.getAnimation();
+        const count = sheet.count(name) || 1;
+        let frame;
+        if (this.charge > 0) {
+            frame = 0;
+        } else if (this.action) {
+            const progress = 1 - this.action.timer / this.action.duration;
+            frame = Math.min(count - 1, Math.floor(progress * count));
         } else {
-            this.drawFallback(ctx);
+            frame = Math.floor(this.tick / (ANIM_SPEED[name] || 10)) % count;
         }
-
-        ctx.restore();
-
-        if (this.meleeSwing) {
-            this.drawMeleeSwing(ctx);
-        }
-    }
-
-    drawMeleeSwing(ctx) {
-        const progress = 1 - (this.meleeSwing.timer / this.meleeSwing.maxTimer);
-        const startAngle = -Math.PI * 0.75;
-        const endAngle = Math.PI * 0.75;
-        const currentAngle = startAngle + progress * (endAngle - startAngle);
-
-        const pivotX = this.meleeSwing.pivotX;
-        const pivotY = this.meleeSwing.pivotY;
-        const length = this.meleeSwing.length;
-        const facing = this.meleeSwing.facing;
 
         ctx.save();
-
-        const arcTrail = [];
-        for (let i = 0; i <= progress * 20; i++) {
-            const t = i / 20;
-            const angle = startAngle + t * (endAngle - startAngle);
-            const px = pivotX + Math.cos(angle) * length * facing;
-            const py = pivotY + Math.sin(angle) * length;
-            arcTrail.push({ x: px, y: py });
+        if (this.invincibleTimer > 0 && Math.floor(this.invincibleTimer / 5) % 2 === 0) {
+            ctx.globalAlpha = 0.45;
         }
-
-        if (arcTrail.length > 1) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 8;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(arcTrail[0].x, arcTrail[0].y);
-            for (let i = 1; i < arcTrail.length; i++) {
-                ctx.lineTo(arcTrail[i].x, arcTrail[i].y);
-            }
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255, 200, 100, 0.5)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(arcTrail[0].x, arcTrail[0].y);
-            for (let i = 1; i < arcTrail.length; i++) {
-                ctx.lineTo(arcTrail[i].x, arcTrail[i].y);
-            }
-            ctx.stroke();
+        if (this.dashTimer > 0) {
+            ctx.globalAlpha = 0.25;
+            sheet.draw(ctx, name, frame, this.x + this.width / 2 - this.facing * 24, this.y + this.height, PLAYER_SCALE, this.facing);
+            ctx.globalAlpha = 1;
         }
-
-        const tipX = pivotX + Math.cos(currentAngle) * length * facing;
-        const tipY = pivotY + Math.sin(currentAngle) * length;
-
-        const handleLen = 22;
-        const handleEndX = pivotX + Math.cos(currentAngle) * handleLen * facing;
-        const handleEndY = pivotY + Math.sin(currentAngle) * handleLen;
-
-        ctx.strokeStyle = '#8B4513';
-        ctx.lineWidth = 5;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(pivotX, pivotY);
-        ctx.lineTo(handleEndX, handleEndY);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#6B3410';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        const gripStart = pivotX + Math.cos(currentAngle) * 8 * facing;
-        const gripEnd = pivotY + Math.sin(currentAngle) * 8;
-        const gripEnd2X = pivotX + Math.cos(currentAngle) * 16 * facing;
-        const gripEnd2Y = pivotY + Math.sin(currentAngle) * 16;
-        ctx.moveTo(gripStart, gripEnd);
-        ctx.lineTo(gripEnd2X, gripEnd2Y);
-        ctx.stroke();
-
-        const cupCenterX = tipX;
-        const cupCenterY = tipY;
-
-        ctx.fillStyle = '#c0392b';
-        ctx.beginPath();
-        ctx.ellipse(cupCenterX, cupCenterY, 16, 10, currentAngle + Math.PI / 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#e74c3c';
-        ctx.beginPath();
-        ctx.ellipse(cupCenterX - 3 * facing, cupCenterY - 2, 7, 4, currentAngle + Math.PI / 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = '#922b21';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(cupCenterX, cupCenterY, 16, 10, currentAngle + Math.PI / 2, 0, Math.PI * 2);
-        ctx.stroke();
-
+        sheet.draw(ctx, name, frame, this.x + this.width / 2, this.y + this.height, PLAYER_SCALE, this.facing);
         ctx.restore();
+
+        if (this.charge > 0) this.drawChargeMeter(ctx);
     }
 
-    getSprite(state, frame, spriteParser) {
-        if (!spriteParser) return null;
-
-        const spriteMap = {
-            'idle': 'idle',
-            'walk': 'walk',
-            'jump': 'jump',
-            'attack': 'throw',
-            'melee': 'melee',
-            'crouch': 'crouch',
-            'hurt': 'hurt',
-            'run': 'run',
-            'victory': 'victory'
-        };
-
-        const spriteName = spriteMap[state];
-        if (spriteName) {
-            return spriteParser.getSprite(spriteName, frame);
-        }
-        return null;
-    }
-
-    drawFallback(ctx) {
-        ctx.fillStyle = '#4a90d9';
+    drawChargeMeter(ctx) {
+        const t = Math.min(1, this.charge / CHARGE_TIME);
+        const cx = this.x + this.width / 2;
+        const cy = this.y - 14;
+        ctx.save();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.beginPath();
-        ctx.roundRect(0, 0, this.width, this.height, 8);
-        ctx.fill();
-
-        ctx.fillStyle = '#f4c28b';
-        ctx.beginPath();
-        ctx.arc(this.width / 2, 16, 14, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(this.width / 2 - 5, 14, 4, 0, Math.PI * 2);
-        ctx.arc(this.width / 2 + 5, 14, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(this.width / 2 - 5, 14, 2, 0, Math.PI * 2);
-        ctx.arc(this.width / 2 + 5, 14, 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        if (this.state === 'hurt') {
-            ctx.arc(this.width / 2, 24, 5, Math.PI, 0);
-        } else {
-            ctx.arc(this.width / 2, 22, 5, 0, Math.PI);
-        }
+        ctx.arc(cx, cy, 9, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.strokeStyle = t >= 1 && Math.floor(this.tick / 4) % 2 ? '#fff' : '#7fdbff';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 9, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
     }
 
     getBounds() {

@@ -1,292 +1,126 @@
-class SpriteParser {
-    constructor() {
-        this.sprites = {};
-        this.image = null;
-        this.playerWidth = 40;
-        this.playerHeight = 108;
+// Frames en píxeles de la hoja original: [x, y, w, h] o [x, y, w, h, anchorX].
+// anchorX = centro del cuerpo dentro del recorte cuando un arma sobresale (por defecto, w / 2).
+// Todos los personajes de las hojas miran a la derecha.
+const FREDDY_FRAMES = {
+    idle: [[126, 52, 100, 274], [342, 56, 92, 270]],
+    walk: [
+        [856, 48, 110, 278], [1046, 48, 132, 274], [1260, 48, 118, 274], [1462, 48, 124, 274],
+        [1926, 48, 90, 278], [2124, 48, 124, 276], [2352, 48, 132, 278], [2586, 48, 134, 274],
+    ],
+    run: [
+        [94, 426, 174, 262], [322, 428, 174, 262], [576, 426, 122, 264],
+        [760, 428, 158, 262], [980, 428, 168, 254], [1202, 424, 164, 262],
+    ],
+    jump: [[1886, 382, 182, 214]],
+    fall: [[2098, 424, 180, 272]],
+    crouch: [[2346, 486, 136, 206]],
+    melee: [[1380, 794, 204, 260, 52], [1032, 794, 240, 258, 58], [130, 794, 246, 258, 52]],
+    throw: [[1796, 794, 116, 260, 42], [2034, 802, 128, 252, 50], [2298, 802, 138, 252, 44]],
+    hurt: [[162, 1162, 138, 254], [420, 1150, 206, 266]],
+    knock: [[1598, 1166, 244, 246]],
+    death: [[2106, 1312, 288, 98]],
+    mound: [[1754, 592, 318, 106]],
+};
+
+const ENEMY_FRAMES = {
+    bug_walk: [[78, 58, 190, 268], [296, 58, 190, 268], [516, 58, 182, 268]],
+    bug_run: [
+        [80, 434, 222, 250], [332, 436, 190, 252], [556, 432, 166, 260],
+        [768, 434, 170, 254], [980, 428, 188, 262], [1208, 432, 178, 256],
+    ],
+    bug_attack: [[818, 54, 168, 274], [1022, 52, 170, 264], [1234, 52, 168, 274], [1442, 58, 188, 264]],
+    e404_idle: [[1858, 54, 180, 256], [2110, 60, 174, 252], [2344, 54, 184, 258], [2582, 60, 180, 252]],
+    e404_throw: [[1850, 412, 176, 258], [2136, 428, 160, 252]],
+    e404_hurt: [[2574, 792, 174, 258]],
+    e404_death: [[2356, 458, 166, 226], [2560, 440, 240, 260]],
+    spider_walk: [[88, 806, 306, 252]],
+    spider_spit: [[428, 806, 284, 252, 110], [994, 806, 262, 252, 105], [1326, 806, 260, 252, 105]],
+    spider_hurt: [[82, 1166, 262, 252], [392, 1168, 260, 236]],
+    spaghetti: [[830, 1206, 338, 202], [1188, 1158, 385, 252], [1585, 1158, 333, 252]],
+    spider_death: [[2086, 1240, 336, 170], [2472, 1252, 338, 166]],
+};
+
+// Recorta un frame y quita el fondo verde. Solo se borra el verde conectado con el borde del
+// recorte (más los huecos de verde puro), así sobreviven los verdes internos: dígitos 404, babas.
+function chromaKeyFrame(img, [x, y, w, h]) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const d = imageData.data;
+
+    const isBackground = i => d[i + 1] > 140 && d[i + 1] - d[i] > 70 && d[i + 1] - d[i + 2] > 70;
+    const stack = [];
+    for (let px = 0; px < w; px++) stack.push(px, (h - 1) * w + px);
+    for (let py = 0; py < h; py++) stack.push(py * w, py * w + w - 1);
+    while (stack.length) {
+        const p = stack.pop();
+        const i = p * 4;
+        if (d[i + 3] === 0 || !isBackground(i)) continue;
+        d[i + 3] = 0;
+        const px = p % w;
+        if (px > 0) stack.push(p - 1);
+        if (px < w - 1) stack.push(p + 1);
+        if (p >= w) stack.push(p - w);
+        if (p < w * (h - 1)) stack.push(p + w);
     }
 
-    async load() {
-        return new Promise((resolve, reject) => {
-            this.image = new Image();
-            this.image.onload = () => {
-                this.processImage();
-                this.defineSpriteRegions();
-                resolve();
-            };
-            this.image.onerror = reject;
-            this.image.src = ASSETS['freddy'];
-        });
+    for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 1] > 240 && d[i] < 15 && d[i + 2] < 15) d[i + 3] = 0;
     }
 
-    processImage() {
-        // The background has already been removed from the image file itself,
-        // so we don't need the runtime chroma-key logic anymore.
-        this.processedImage = this.image;
+    // Despill: el halo verdoso pegado al fondo se neutraliza.
+    for (let p = 0; p < w * h; p++) {
+        const i = p * 4;
+        if (d[i + 3] === 0) continue;
+        const px = p % w;
+        const nearBg = (px > 0 && d[i - 1] === 0) || (px < w - 1 && d[i + 7] === 0) ||
+            (p >= w && d[i - w * 4 + 3] === 0) || (p < w * (h - 1) && d[i + w * 4 + 3] === 0);
+        if (nearBg) d[i + 1] = Math.min(d[i + 1], Math.max(d[i], d[i + 2]));
     }
 
-    extractSprite(x, y, w, h, targetW, targetH) {
-        if (!targetW) targetW = this.playerWidth;
-        if (!targetH) targetH = this.playerHeight;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(this.processedImage, x, y, w, h, 0, 0, targetW, targetH);
-        return canvas;
-    }
-
-    defineSpriteRegions() {
-        const pw = this.playerWidth;
-        const ph = this.playerHeight;
-
-        // Band 0 (y:47-328): Standing poses
-        this.sprites['idle'] = [
-            this.extractSprite(125, 50, 101, 278, pw, ph),
-            this.extractSprite(342, 53, 93, 275, pw, ph),
-        ];
-
-        this.sprites['walk'] = [
-            this.extractSprite(554, 53, 94, 275, pw, ph),
-            this.extractSprite(855, 47, 111, 281, pw, ph),
-            this.extractSprite(1045, 47, 133, 277, pw, ph),
-            this.extractSprite(1260, 47, 119, 277, pw, ph),
-        ];
-
-        this.sprites['jump'] = [
-            this.extractSprite(1462, 47, 124, 278, pw, ph),
-            this.extractSprite(1926, 47, 91, 281, pw, ph),
-        ];
-
-        this.sprites['attack'] = [
-            this.extractSprite(2124, 47, 124, 280, pw, ph),
-            this.extractSprite(2351, 47, 135, 281, pw, ph),
-            this.extractSprite(2584, 47, 136, 278, pw, ph),
-        ];
-
-        // Band 1 (y:339-700): Action poses
-        this.sprites['throw'] = [
-            this.extractSprite(93, 341, 187, 349, pw, ph),
-            this.extractSprite(322, 339, 179, 353, pw, ph),
-        ];
-
-        this.sprites['melee'] = [
-            this.extractSprite(575, 424, 124, 268, pw, ph),
-            this.extractSprite(758, 425, 160, 266, pw, ph),
-            this.extractSprite(980, 425, 168, 259, pw, ph),
-        ];
-
-        this.sprites['crouch'] = [
-            this.extractSprite(1593, 461, 108, 233, 40, 72),
-        ];
-
-        this.sprites['hurt'] = [
-            this.extractSprite(2098, 421, 180, 277, pw, ph),
-            this.extractSprite(2344, 484, 140, 210, pw, ph),
-            this.extractSprite(2607, 475, 130, 218, pw, ph),
-        ];
-
-        // Band 3 (y:783-1111): Victory and run
-        this.sprites['victory'] = [
-            this.extractSprite(2014, 799, 160, 305, pw, ph),
-            this.extractSprite(2273, 800, 183, 304, pw, ph),
-            this.extractSprite(2599, 790, 158, 265, pw, ph),
-        ];
-
-        this.sprites['run'] = [
-            this.extractSprite(1366, 791, 234, 320, pw, ph),
-        ];
-
-        this.sprites['idle_alt'] = [
-            this.extractSprite(1795, 791, 119, 265, pw, ph),
-        ];
-
-        // Band 2 (y:706-752): Paper rolls and plunger items
-        this.sprites['paper_roll'] = [
-            this.extractSprite(610, 707, 24, 38, 24, 24),
-            this.extractSprite(636, 707, 25, 38, 24, 24),
-            this.extractSprite(664, 707, 22, 37, 24, 24),
-            this.extractSprite(690, 707, 22, 37, 24, 24),
-            this.extractSprite(715, 707, 20, 37, 24, 24),
-            this.extractSprite(738, 707, 22, 37, 24, 24),
-            this.extractSprite(788, 707, 22, 37, 24, 24),
-            this.extractSprite(814, 707, 23, 38, 24, 24),
-            this.extractSprite(841, 707, 24, 37, 24, 24),
-        ];
-
-        this.sprites['plunger'] = [
-            this.extractSprite(2005, 706, 22, 39, 28, 28),
-            this.extractSprite(2029, 707, 25, 37, 28, 28),
-            this.extractSprite(2057, 707, 64, 37, 28, 28),
-            this.extractSprite(2124, 707, 22, 37, 28, 28),
-            this.extractSprite(2173, 707, 19, 38, 28, 28),
-            this.extractSprite(2196, 707, 23, 38, 28, 28),
-            this.extractSprite(2223, 707, 31, 37, 28, 28),
-            this.extractSprite(2257, 707, 23, 37, 28, 28),
-        ];
-    }
-
-    getSprite(name, frame = 0) {
-        if (this.sprites[name]) {
-            if (Array.isArray(this.sprites[name])) {
-                const frames = this.sprites[name];
-                return frames[frame % frames.length];
-            }
-            return this.sprites[name];
-        }
-        return null;
-    }
-
-    getSpriteCount(name) {
-        if (this.sprites[name] && Array.isArray(this.sprites[name])) {
-            return this.sprites[name].length;
-        }
-        return this.sprites[name] ? 1 : 0;
-    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
 }
 
-
-class EnemySpriteParser {
-    constructor() {
-        this.sprites = {};
-        this.image = null;
+class SpriteSheet {
+    constructor(src, frameDefs) {
+        this.src = src;
+        this.frameDefs = frameDefs;
+        this.frames = {};
     }
 
-    async load() {
+    load() {
         return new Promise((resolve, reject) => {
-            this.image = new Image();
-            this.image.onload = () => {
-                this.processImage();
-                this.defineSpriteRegions();
+            const img = new Image();
+            img.onload = () => {
+                for (const [name, rects] of Object.entries(this.frameDefs)) {
+                    this.frames[name] = rects.map(r => ({ canvas: chromaKeyFrame(img, r), anchorX: r[4] ?? r[2] / 2 }));
+                }
                 resolve();
             };
-            this.image.onerror = reject;
-            this.image.src = ASSETS['enemies'];
+            img.onerror = reject;
+            img.src = this.src;
         });
     }
 
-    processImage() {
-        // Chroma key out the green background
-        const canvas = document.createElement('canvas');
-        canvas.width = this.image.width;
-        canvas.height = this.image.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(this.image, 0, 0);
-
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-
-            // Bright green background (#00FF00 or close)
-            if (g > 150 && r < 100 && b < 100) {
-                data[i + 3] = 0; // Make transparent
-            }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-        this.processedImage = canvas;
+    count(name) {
+        return this.frames[name] ? this.frames[name].length : 0;
     }
 
-    extractSprite(x, y, w, h) {
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(this.processedImage, x, y, w, h, 0, 0, w, h);
-        return canvas;
-    }
-
-    defineSpriteRegions() {
-        // Based on our analysis:
-        // Enemy 1: "CodeBug" (Row 0)
-        this.sprites['CodeBug'] = {
-            'WALK': [
-                this.extractSprite(77, 58, 189, 269),
-                this.extractSprite(297, 58, 185, 267),
-                this.extractSprite(516, 58, 182, 268),
-                this.extractSprite(819, 55, 168, 272)
-            ],
-            'ATTACK': [
-                this.extractSprite(1023, 53, 168, 263),
-                this.extractSprite(1235, 53, 167, 272),
-                this.extractSprite(1443, 58, 186, 265)
-            ],
-            'HIT': [
-                this.extractSprite(1870, 59, 158, 251)
-            ],
-            'DEATH': [
-                this.extractSprite(2113, 60, 158, 251),
-                this.extractSprite(2357, 60, 157, 251),
-                this.extractSprite(2595, 60, 158, 251)
-            ]
-        };
-
-        // Enemy 2: "Error404" (Row 2)
-        this.sprites['Error404'] = {
-            'FLOAT': [
-                this.extractSprite(81, 435, 220, 249),
-                this.extractSprite(333, 436, 188, 251),
-                this.extractSprite(556, 432, 166, 260),
-                this.extractSprite(768, 435, 170, 252)
-            ],
-            'ATTACK': [
-                this.extractSprite(980, 429, 188, 261),
-                this.extractSprite(1209, 433, 177, 255),
-                this.extractSprite(1583, 439, 159, 251)
-            ],
-            'DEATH': [
-                this.extractSprite(1854, 419, 160, 251),
-                this.extractSprite(2136, 428, 159, 250),
-                this.extractSprite(2357, 459, 165, 225)
-            ]
-        };
-
-        // Enemy 3: "SpaghettiCode" (Rows 4, 5, 6)
-        this.sprites['SpaghettiCode'] = {
-            'WALK': [
-                this.extractSprite(89, 807, 300, 247),
-                this.extractSprite(433, 807, 257, 247),
-                this.extractSprite(997, 807, 247, 245)
-            ],
-            'ATTACK': [
-                this.extractSprite(1329, 807, 248, 250),
-                this.extractSprite(1775, 807, 157, 249),
-                this.extractSprite(1214, 1158, 703, 252) // Extended whip attack from row 5
-            ],
-            'HIT': [
-                this.extractSprite(2035, 807, 157, 249)
-            ],
-            'DEATH': [
-                this.extractSprite(2298, 810, 156, 248),
-                this.extractSprite(2588, 803, 159, 247),
-                this.extractSprite(2476, 1252, 333, 165) // Collapsed death pose from row 6
-            ]
-        };
-    }
-
-    getSprite(enemyType, state, frame = 0) {
-        if (this.sprites[enemyType] && this.sprites[enemyType][state]) {
-            const frames = this.sprites[enemyType][state];
-            if (frames && frames.length > 0) {
-                return frames[frame % frames.length];
-            }
-        }
-        return null;
-    }
-
-    getSpriteCount(enemyType, state) {
-        if (this.sprites[enemyType] && this.sprites[enemyType][state]) {
-            return this.sprites[enemyType][state].length;
-        }
-        return 0;
+    // Dibuja el frame con los pies en (x, bottom).
+    draw(ctx, name, frame, x, bottom, scale, facing = 1) {
+        const list = this.frames[name];
+        if (!list) return;
+        const f = list[frame % list.length];
+        const w = f.canvas.width * scale;
+        const h = f.canvas.height * scale;
+        ctx.save();
+        ctx.translate(x, bottom);
+        ctx.scale(facing, 1);
+        ctx.drawImage(f.canvas, -f.anchorX * scale, -h, w, h);
+        ctx.restore();
     }
 }

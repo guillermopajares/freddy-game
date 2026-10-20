@@ -8,83 +8,51 @@ class Collision {
         );
     }
 
-    static resolvePlatformCollision(entity, platform) {
-        const overlapX = Math.min(
-            entity.x + entity.width - platform.x,
-            platform.x + platform.width - entity.x
-        );
-        const overlapY = Math.min(
-            entity.y + entity.height - platform.y,
-            platform.y + platform.height - entity.y
-        );
-
-        if (overlapY < overlapX) {
-            if (entity.y < platform.y) {
-                entity.y = platform.y - entity.height;
-                entity.onGround = true;
-                entity.velocityY = 0;
-            } else {
-                entity.y = platform.y + platform.height;
-                entity.velocityY = 0;
-            }
-        } else {
-            if (entity.x < platform.x) {
-                entity.x = platform.x - entity.width;
-            } else {
-                entity.x = platform.x + platform.width;
-            }
-            entity.velocityX = 0;
-        }
-    }
-
+    // Resuelve solapes con plataformas. Deja en entity.ground la plataforma pisada
+    // (para que las plataformas móviles arrastren a quien está encima).
     static checkPlatformCollisions(entity, platforms) {
         entity.onGround = false;
+        entity.ground = null;
         if (entity.touchingWall !== undefined) {
             entity.touchingWall = 0;
         }
 
         platforms.forEach(platform => {
-            if (this.aabb(entity, platform)) {
-                const overlapX = Math.min(
-                    entity.x + entity.width - platform.x,
-                    platform.x + platform.width - entity.x
-                );
-                const overlapY = Math.min(
-                    entity.y + entity.height - platform.y,
-                    platform.y + platform.height - entity.y
-                );
+            if (!this.aabb(entity, platform)) return;
 
-                if (overlapY < overlapX) {
-                    if (entity.y < platform.y) {
-                        entity.y = platform.y - entity.height;
-                        entity.onGround = true;
-                        entity.velocityY = 0;
-                        if (entity.jumpsLeft !== undefined) {
-                            entity.jumpsLeft = entity.maxJumps;
-                        }
-                    } else {
-                        entity.y = platform.y + platform.height;
-                        entity.velocityY = 0;
+            const overlapX = Math.min(
+                entity.x + entity.width - platform.x,
+                platform.x + platform.width - entity.x
+            );
+            const overlapY = Math.min(
+                entity.y + entity.height - platform.y,
+                platform.y + platform.height - entity.y
+            );
+
+            if (overlapY < overlapX) {
+                if (entity.y < platform.y) {
+                    entity.y = platform.y - entity.height;
+                    entity.onGround = true;
+                    entity.ground = platform;
+                    entity.velocityY = 0;
+                    if (entity.jumpsLeft !== undefined) {
+                        entity.jumpsLeft = entity.maxJumps;
                     }
                 } else {
-                    if (entity.x < platform.x) {
-                        entity.x = platform.x - entity.width;
-                        if (entity.touchingWall !== undefined && !entity.onGround && entity.velocityY > 0) {
-                            entity.touchingWall = 1; // Wall on right
-                            entity.velocityY *= 0.8; // Slide down slower
-                        }
-                    } else {
-                        entity.x = platform.x + platform.width;
-                        if (entity.touchingWall !== undefined && !entity.onGround && entity.velocityY > 0) {
-                            entity.touchingWall = -1; // Wall on left
-                            entity.velocityY *= 0.8; // Slide down slower
-                        }
-                    }
-                    entity.velocityX = 0;
+                    entity.y = platform.y + platform.height;
+                    entity.velocityY = 0;
                 }
+            } else {
+                const wallSide = entity.x < platform.x ? 1 : -1;
+                entity.x = wallSide === 1 ? platform.x - entity.width : platform.x + platform.width;
+                if (entity.touchingWall !== undefined && !entity.onGround && entity.velocityY > 0) {
+                    entity.touchingWall = wallSide;
+                    entity.velocityY *= 0.8; // Deslizar por la pared
+                }
+                entity.velocityX = 0;
             }
         });
     }
-        });
-    }
 }
+
+if (typeof module !== 'undefined') module.exports = Collision;

@@ -43,9 +43,28 @@ class Collectible {
         } else if (this.type === 'heart') {
             ctx.fillStyle = '#e74c3c';
             this.drawHeart(ctx, 0, 0, 12);
+        } else if (this.type === 'paper') {
+            this.drawPaperPack(ctx);
         }
 
         ctx.restore();
+    }
+
+    // Paquete de rollos: recarga munición.
+    drawPaperPack(ctx) {
+        [[-7, 4], [7, 4], [0, -8]].forEach(([x, y]) => {
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x, y, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#d4a574';
+            ctx.beginPath();
+            ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
     }
 
     drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {

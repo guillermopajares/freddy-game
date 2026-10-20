@@ -24,9 +24,6 @@ describe('Projectile', () => {
             expect(projectile.active).toBe(true);
             expect(projectile.rotation).toBe(0);
             expect(projectile.trail).toEqual([]);
-            expect(projectile.animFrame).toBe(0);
-            expect(projectile.animTimer).toBe(0);
-            expect(projectile.swingAngle).toBe(0);
         });
 
         it('should initialize correctly when explicitly passed type "paper"', () => {
@@ -47,22 +44,30 @@ describe('Projectile', () => {
             expect(projectile.velocityX).toBe(direction * 8);
         });
 
-        it('should initialize correctly for a different type (e.g., "plunger")', () => {
-            const x = 150;
-            const y = 250;
-            const direction = 1;
+        it('should initialize an aimed enemy "pixel" shot', () => {
+            const projectile = new Projectile(150, 250, 0.6, 'pixel', 3.6);
 
-            const projectile = new Projectile(x, y, direction, 'plunger');
+            expect(projectile.type).toBe('pixel');
+            expect(projectile.width).toBe(18);
+            expect(projectile.damage).toBe(1);
+            expect(projectile.velocityX).toBeCloseTo(0.6 * 4.5);
+            expect(projectile.velocityY).toBe(3.6);
+        });
+    });
 
-            expect(projectile.x).toBe(x);
-            expect(projectile.y).toBe(y);
-            expect(projectile.direction).toBe(direction);
-            expect(projectile.type).toBe('plunger');
-            expect(projectile.width).toBe(40);
-            expect(projectile.height).toBe(40);
-            expect(projectile.speed).toBe(6);
-            expect(projectile.lifetime).toBe(35);
-            expect(projectile.velocityX).toBe(direction * 6);
+    describe('update', () => {
+        it('applies gravity to goo and deactivates when leaving the screen', () => {
+            const goo = new Projectile(100, 700, 1, 'goo', -5);
+            goo.update();
+            expect(goo.velocityY).toBeCloseTo(-5 + 0.22);
+            for (let i = 0; i < 100 && goo.active; i++) goo.update();
+            expect(goo.active).toBe(false);
+        });
+
+        it('charged paper pierces and hits harder', () => {
+            const big = new Projectile(0, 0, 1, 'paperBig');
+            expect(big.pierce).toBe(true);
+            expect(big.damage).toBe(3);
         });
     });
 });
