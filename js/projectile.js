@@ -173,3 +173,5 @@ class Projectile {
         return { x: this.x, y: this.y, width: this.width, height: this.height };
     }
 }
+
+if (typeof module !== 'undefined') module.exports = Projectile;
