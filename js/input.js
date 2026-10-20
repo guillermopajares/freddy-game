@@ -2,10 +2,13 @@ class InputHandler {
     constructor() {
         this.keys = {};
         this.pad = {};
+        this.touch = {};
         this.justPressed = {};
         this.justReleased = {};
 
         window.addEventListener('keydown', (e) => {
+            // Escribir el nombre o tocar los ajustes no debe mover a Freddy
+            if (e.target.closest && e.target.closest('input, select, button, summary')) return;
             if (!this.keys[e.code]) {
                 this.justPressed[e.code] = true;
             }
@@ -20,6 +23,22 @@ class InputHandler {
 
         // Al perder el foco no llegan los keyup: sin esto Freddy seguiría andando solo.
         window.addEventListener('blur', () => { this.keys = {}; });
+
+        // Botones táctiles: cada uno equivale a una tecla (data-code). Multitáctil: un dedo por botón.
+        document.querySelectorAll('#touch-controls [data-code]').forEach(btn => {
+            const code = btn.dataset.code;
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                if (!this.touch[code]) this.justPressed[code] = true;
+                this.touch[code] = true;
+                // La captura hace que soltar el dedo fuera del botón también cuente como soltar
+                try { btn.setPointerCapture(e.pointerId); } catch (err) { /* puntero ya liberado */ }
+            });
+            const release = () => { this.touch[code] = false; };
+            btn.addEventListener('pointerup', release);
+            btn.addEventListener('pointercancel', release);
+            btn.addEventListener('lostpointercapture', release);
+        });
     }
 
     // Mando estándar: se traduce a los mismos códigos que el teclado.
@@ -47,7 +66,7 @@ class InputHandler {
     }
 
     isDown(code) {
-        return !!this.keys[code] || !!this.pad[code];
+        return !!this.keys[code] || !!this.pad[code] || !!this.touch[code];
     }
 
     isPressed(code) {

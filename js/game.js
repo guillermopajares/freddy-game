@@ -3,6 +3,7 @@ const STAR_TYPES = new Set(['coin', 'star', 'heart']); // lo que cuenta para las
 const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
 const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
 const BACKGROUNDS = ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'];
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
 
 function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -11,6 +12,20 @@ function loadImage(src) {
         img.onerror = reject;
         img.src = src;
     });
+}
+
+// localStorage puede lanzar (modo privado, cookies bloqueadas): entonces no se guarda nada.
+function safeStorage() {
+    try {
+        return window.localStorage;
+    } catch (e) {
+        return null;
+    }
+}
+
+function formatTime(seconds) {
+    const s = Math.floor(seconds);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 class Game {
@@ -24,6 +39,7 @@ class Game {
         this.input = new InputHandler();
         this.backgrounds = {};
         this.scenery = new Scenery(this.backgrounds);
+        this.progress = new Progress(safeStorage());
         this.state = 'loading';
         this.currentLevel = 0;
         this.player = null;
@@ -37,28 +53,47 @@ class Game {
         this.menuParticles = [];
         this.screenShake = { x: 0, y: 0, intensity: 0 };
         this.flashAlpha = 0;
+        this.fade = 0; // negro a pantalla completa: fundidos al entrar y al cruzar la puerta
         this.hitstop = 0;
         this.camX = 0;
         this.banner = null; // { text, timer }
         this.boss = null;
         this.pendingBoss = null;
+        this.flood = null;
+        this.stolen = false;
         this.combo = 0;
         this.comboTimer = 0;
         this.levelTime = 0;
-        this.progress = this.loadProgress();
+        this.exitTimer = 0;
+        this.pendingLevel = null; // { index, stats } mientras se muestra la historia
 
-        this.overlay = document.getElementById('overlay');
-        this.overlayTitle = document.getElementById('overlay-title');
-        this.overlaySubtitle = document.getElementById('overlay-subtitle');
-        this.overlayText = document.getElementById('overlay-text');
-        this.overlayStars = document.getElementById('overlay-stars');
-        this.overlayScore = document.getElementById('overlay-score');
-        this.overlayDivider = document.getElementById('overlay-divider');
-        this.controlsInfo = document.getElementById('controls-info');
+        const $ = id => document.getElementById(id);
+        this.overlay = $('overlay');
+        this.overlayTitle = $('overlay-title');
+        this.overlaySubtitle = $('overlay-subtitle');
+        this.overlayText = $('overlay-text');
+        this.overlayStars = $('overlay-stars');
+        this.overlayScore = $('overlay-score');
+        this.overlayButtons = $('overlay-buttons');
+        this.panels = $('panels');
+        this.nameEntry = $('name-entry');
+        this.nameInput = $('name-input');
+        this.toast = $('toast');
+        this.toastQueue = [];
+
+        this.bindSettings();
+        this.nameEntry.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.progress.addToRanking(this.nameInput.value, this.player.score, this.progress.settings.difficulty);
+            this.nameEntry.hidden = true;
+            this.nameInput.blur();
+            this.renderRanking();
+            document.getElementById('ranking').open = true;
+        });
 
         // Cambiar de pestaña o ventana pausa el juego
         window.addEventListener('blur', () => {
-            if (this.state === 'playing') this.state = 'paused';
+            if (this.state === 'playing') this.pause();
         });
     }
 
@@ -78,7 +113,7 @@ class Game {
             ]);
         } catch (e) {
             console.error('Failed to load assets', e);
-            this.ctx.fillText('Error cargando los sprites', 480, 400);
+            this.ctx.fillText('Error cargando los sprites', 480, 420);
             return;
         }
         Object.keys(ENEMY_FRAMES)
@@ -120,84 +155,218 @@ class Game {
         ctx.fillRect(330, 370, 300 * fraction, 12);
     }
 
-    // Progreso: niveles desbloqueados, mejores estrellas/tiempo por nivel y récord de puntos.
-    loadProgress() {
-        try {
-            const saved = JSON.parse(localStorage.getItem('freddyProgress'));
-            if (saved && saved.unlocked) return saved;
-        } catch (e) { /* almacenamiento no disponible */ }
-        return { unlocked: 1, best: {}, highScore: 0 };
+    // --- Ajustes, logros y ranking -------------------------------------------------
+
+    bindSettings() {
+        const s = this.progress.settings;
+        const volume = document.getElementById('opt-volume');
+        const shake = document.getElementById('opt-shake');
+        const flash = document.getElementById('opt-flash');
+        const difficulty = document.getElementById('opt-difficulty');
+        volume.value = s.volume;
+        shake.checked = s.shake;
+        flash.checked = s.flash;
+        difficulty.value = s.difficulty;
+        Sound.setVolume(s.volume / 100);
+
+        const onChange = (e) => {
+            s.volume = Number(volume.value);
+            s.shake = shake.checked;
+            s.flash = flash.checked;
+            s.difficulty = difficulty.value;
+            Sound.setVolume(s.volume / 100);
+            this.progress.save();
+            if (e.type === 'change') e.target.blur(); // que Espacio/flechas vuelvan al juego
+        };
+        [volume, shake, flash, difficulty].forEach(el => {
+            el.addEventListener('input', onChange);
+            el.addEventListener('change', onChange);
+        });
+        this.difficultySelect = difficulty;
     }
 
-    saveProgress() {
-        try {
-            localStorage.setItem('freddyProgress', JSON.stringify(this.progress));
-        } catch (e) { /* almacenamiento bloqueado: solo se pierde el progreso */ }
+    unlockAchievement(id) {
+        if (!this.progress.unlock(id)) return;
+        this.showToast(`🏆 ${ACHIEVEMENTS[id]}`);
+        Sound.play('achievement');
     }
 
-    recordScore(score) {
-        if (score > this.progress.highScore) {
-            this.progress.highScore = score;
-            this.saveProgress();
-        }
+    // Avisos en HTML por encima de todo (también de los menús), uno detrás de otro.
+    showToast(text) {
+        this.toastQueue.push(text);
+        if (this.toastQueue.length > 1) return;
+        const next = () => {
+            this.toast.textContent = this.toastQueue[0];
+            this.toast.classList.add('show');
+            setTimeout(() => {
+                this.toast.classList.remove('show');
+                setTimeout(() => {
+                    this.toastQueue.shift();
+                    if (this.toastQueue.length) next();
+                }, 400);
+            }, 3000);
+        };
+        next();
     }
 
-    initMenuParticles() {
-        for (let i = 0; i < 30; i++) {
-            this.menuParticles.push({
-                x: Math.random() * 960,
-                y: Math.random() * 720,
-                size: Math.random() * 4 + 2,
-                speedY: Math.random() * 0.5 + 0.2,
-                speedX: (Math.random() - 0.5) * 0.3,
-                rotation: Math.random() * Math.PI * 2,
-                rotSpeed: (Math.random() - 0.5) * 0.02,
-                alpha: Math.random() * 0.3 + 0.1,
-                type: Math.random() > 0.5 ? 'paper' : 'star'
-            });
-        }
+    renderAchievements() {
+        const got = this.progress.data.achievements;
+        const ids = Object.keys(ACHIEVEMENTS);
+        document.querySelector('#achievements summary').textContent =
+            `Logros (${ids.filter(id => got[id]).length}/${ids.length})`;
+        const list = document.getElementById('achievement-list');
+        list.replaceChildren(...ids.map(id => {
+            const li = document.createElement('li');
+            li.textContent = `${got[id] ? '🏆' : '🔒'} ${ACHIEVEMENTS[id]}`;
+            if (!got[id]) li.className = 'locked';
+            return li;
+        }));
     }
 
-    showOverlay(titleClass, title, text, score) {
+    renderRanking() {
+        const list = document.getElementById('ranking-list');
+        const ranking = this.progress.data.ranking;
+        list.replaceChildren(...(ranking.length ? ranking : [null]).map(entry => {
+            const li = document.createElement('li');
+            li.textContent = entry
+                ? `${entry.name} — ${entry.score} (${(DIFFICULTY[entry.difficulty] || DIFFICULTY.normal).label})`
+                : 'Aún no hay puntuaciones';
+            return li;
+        }));
+    }
+
+    // --- Pantallas (overlay HTML) ----------------------------------------------------
+
+    showOverlay({ titleClass = '', title, subtitle = null, text = '', score = '', buttons = [], panels = false }) {
         this.overlay.classList.remove('hidden');
         this.overlayTitle.className = titleClass;
         this.overlayTitle.textContent = title;
-        this.overlaySubtitle.style.display = 'none';
+        this.overlaySubtitle.hidden = !subtitle;
+        this.overlaySubtitle.textContent = subtitle || '';
         this.overlayText.textContent = text;
         this.overlayStars.innerHTML = '';
         this.overlayScore.textContent = score;
-        this.overlayDivider.style.display = 'block';
-        this.controlsInfo.style.display = 'none';
+        this.nameEntry.hidden = true;
+        this.panels.hidden = !panels;
+        this.difficultySelect.disabled = this.state !== 'menu'; // la dificultad se elige al empezar
+        if (panels) {
+            this.renderAchievements();
+            this.renderRanking();
+        }
+        this.overlayButtons.replaceChildren(...buttons.map(({ label, action, secondary }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = label;
+            if (secondary) btn.className = 'secondary';
+            btn.addEventListener('pointerdown', e => e.preventDefault()); // sin foco: Enter no lo repite
+            btn.addEventListener('click', action);
+            return btn;
+        }));
+    }
+
+    hideOverlay() {
+        this.overlay.classList.add('hidden');
+    }
+
+    // Pide nombre para el ranking si la puntuación entra en el top 10.
+    offerRanking() {
+        if (!this.progress.qualifiesForRanking(this.player.score)) return;
+        this.nameEntry.hidden = false;
+        this.nameInput.value = '';
+        if (!IS_TOUCH) this.nameInput.focus();
     }
 
     showMenu() {
         this.state = 'menu';
         Sound.music(null);
-        const { unlocked, highScore } = this.progress;
-        const pick = unlocked > 1 ? ` · 1-${unlocked}: elegir nivel` : '';
-        this.showOverlay('', 'FREDDY GAME', `Pulsa ENTER para empezar${pick}`,
-            highScore ? `Récord: ${highScore} · Niveles: ${unlocked}/${levels.length}` : '');
-        this.overlaySubtitle.style.display = 'block';
-        this.overlaySubtitle.textContent = 'Desatasca el código';
-        this.controlsInfo.style.display = 'grid';
+        const { unlocked, highScore } = this.progress.data;
+        const playable = Math.min(unlocked, levels.length);
+        const levelButtons = [];
+        for (let i = 2; i <= playable; i++) {
+            levelButtons.push({ label: `Nivel ${i}`, secondary: true, action: () => this.newGame(i - 1) });
+        }
+        this.showOverlay({
+            title: 'FREDDY GAME',
+            subtitle: 'Desatasca el código',
+            text: IS_TOUCH ? 'Toca Jugar para empezar' : `Pulsa ENTER para empezar${playable > 1 ? ` · 1-${playable}: elegir nivel` : ''}`,
+            score: highScore ? `Récord: ${highScore}` : '',
+            buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons],
+            panels: true,
+        });
+    }
+
+    newGame(levelIndex) {
+        this.showStory(levelIndex, { lives: this.progress.difficulty.lives });
+    }
+
+    showStory(index, stats) {
+        this.state = 'story';
+        this.pendingLevel = { index, stats };
+        this.showOverlay({
+            titleClass: 'level-complete-title',
+            title: levels[index].name.toUpperCase(),
+            text: STORY[index],
+            buttons: [{ label: '¡Vamos!', action: () => this.startPendingLevel() }],
+        });
+    }
+
+    startPendingLevel() {
+        const { index, stats } = this.pendingLevel;
+        this.startLevel(index, stats);
+    }
+
+    pause() {
+        this.state = 'paused';
+        this.showOverlay({
+            title: 'PAUSA',
+            text: IS_TOUCH ? '' : 'ESC para seguir · R para reiniciar el nivel',
+            buttons: [
+                { label: 'Seguir', action: () => this.resume() },
+                { label: 'Reiniciar nivel', secondary: true, action: () => this.restartLevel() },
+                { label: 'Salir al menú', secondary: true, action: () => this.showMenu() },
+            ],
+            panels: true,
+        });
+    }
+
+    resume() {
+        this.state = 'playing';
+        this.hideOverlay();
+    }
+
+    restartLevel() {
+        this.startLevel(this.currentLevel, this.levelStartStats);
+    }
+
+    nextLevel() {
+        const next = this.currentLevel + 1;
+        if (next >= levels.length) this.showVictory();
+        else this.showStory(next, this.playerStats());
     }
 
     showLevelComplete() {
         this.state = 'levelComplete';
         Sound.music(null);
-        Sound.play('flush');
 
         const stars = this.collectedCount >= this.totalCollectibles ? 3 :
                       this.collectedCount >= this.totalCollectibles * 0.6 ? 2 : 1;
         const time = this.levelTime / 60;
-        const best = this.progress.best[this.currentLevel] || { stars: 0, time: Infinity };
-        this.progress.best[this.currentLevel] = { stars: Math.max(best.stars, stars), time: Math.min(best.time, time) };
-        this.progress.unlocked = Math.min(levels.length, Math.max(this.progress.unlocked, this.currentLevel + 2));
-        this.recordScore(this.player.score);
-        this.saveProgress();
+        const best = this.progress.recordLevel(this.currentLevel, stars, time);
+        this.progress.data.unlocked = Math.min(levels.length, this.progress.data.unlocked);
+        this.progress.recordScore(this.player.score);
 
-        this.showOverlay('level-complete-title', '¡NIVEL SUPERADO!', 'Pulsa ENTER para cruzar la puerta',
-            `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(Math.min(best.time, time))})`);
+        if (this.player.hitsTaken === 0) this.unlockAchievement('noDamage');
+        if (stars === 3) this.unlockAchievement('allStars');
+        if (!this.stolen && this.level.enemies.some(e => e.type === 'Error404')) this.unlockAchievement('noSteal');
+        if (this.currentLevel === 0 && time < 60) this.unlockAchievement('speedrun');
+
+        this.showOverlay({
+            titleClass: 'level-complete-title',
+            title: '¡NIVEL SUPERADO!',
+            text: IS_TOUCH ? '' : 'Pulsa ENTER para seguir',
+            score: `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(best.time)})`,
+            buttons: [{ label: 'Siguiente', action: () => this.nextLevel() }],
+        });
         this.overlayStars.innerHTML = Array(3).fill(0).map((_, i) =>
             `<span class="${i < stars ? 'star-filled' : 'star-empty'}">★</span>`
         ).join('');
@@ -207,19 +376,35 @@ class Game {
         this.state = 'gameOver';
         Sound.music(null);
         Sound.play('gameOver');
-        this.recordScore(this.player.score);
-        this.showOverlay('game-over-title', 'GAME OVER', 'Pulsa ENTER para volver al menú',
-            `Puntos: ${this.player.score} · Récord: ${this.progress.highScore}`);
+        this.progress.recordScore(this.player.score);
+        this.showOverlay({
+            titleClass: 'game-over-title',
+            title: 'GAME OVER',
+            text: IS_TOUCH ? '' : 'ENTER para volver al menú',
+            score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
+            buttons: [
+                { label: 'Reintentar nivel', action: () => this.startLevel(this.currentLevel, { ...this.levelStartStats, lives: this.progress.difficulty.lives }) },
+                { label: 'Menú', secondary: true, action: () => this.showMenu() },
+            ],
+        });
+        this.offerRanking();
     }
 
     showVictory() {
         this.state = 'victory';
         Sound.music(null);
         Sound.play('victory');
-        this.recordScore(this.player.score);
-        this.showOverlay('victory-title', '¡HAS GANADO!', 'Pulsa ENTER para volver a jugar',
-            `Puntos: ${this.player.score} · Récord: ${this.progress.highScore}`);
+        this.progress.recordScore(this.player.score);
+        if (this.progress.settings.difficulty === 'hard') this.unlockAchievement('hardWin');
+        this.showOverlay({
+            titleClass: 'victory-title',
+            title: '¡HAS GANADO!',
+            text: ENDING,
+            score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
+            buttons: [{ label: 'Menú', action: () => this.showMenu() }],
+        });
         this.overlayStars.innerHTML = '<span class="star-filled">★★★★★</span>';
+        this.offerRanking();
 
         for (let i = 0; i < 50; i++) {
             this.particles.push({
@@ -252,12 +437,15 @@ class Game {
         }
     }
 
+    // --- Partida -----------------------------------------------------------------
+
     triggerScreenShake(intensity) {
+        if (!this.progress.settings.shake) return;
         this.screenShake.intensity = Math.max(this.screenShake.intensity, intensity);
     }
 
     triggerFlash() {
-        this.flashAlpha = 0.3;
+        if (this.progress.settings.flash) this.flashAlpha = 0.3;
     }
 
     announce(text) {
@@ -268,13 +456,32 @@ class Game {
         this.enemies.push(enemy);
     }
 
+    // Crea un enemigo de los datos del nivel aplicando la dificultad elegida.
+    createEnemy(type, x, y, opts = {}) {
+        const d = this.progress.difficulty;
+        const enemy = new ENEMY_TYPES[type](x, y, { ...opts, elite: opts.elite || (d.elite && !type.startsWith('Boss')) });
+        enemy.health = enemy.maxHealth = Math.max(1, Math.round(enemy.maxHealth * (enemy.isBoss ? d.bossHealth : d.enemyHealth)));
+        return enemy;
+    }
+
+    initMenuParticles() {
+        for (let i = 0; i < 30; i++) {
+            this.menuParticles.push({
+                x: Math.random() * 960,
+                y: Math.random() * 720,
+                size: Math.random() * 4 + 2,
+                speedY: Math.random() * 0.5 + 0.2,
+                speedX: (Math.random() - 0.5) * 0.3,
+                rotation: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 0.02,
+                alpha: Math.random() * 0.3 + 0.1,
+                type: Math.random() > 0.5 ? 'paper' : 'star'
+            });
+        }
+    }
+
     // stats: vidas/puntos/munición que se arrastran entre niveles.
     startLevel(levelIndex, stats = {}) {
-        if (levelIndex >= levels.length) {
-            this.showVictory();
-            return;
-        }
-
         this.currentLevel = levelIndex;
         this.level = levels[levelIndex];
         this.level.reset();
@@ -283,13 +490,23 @@ class Game {
         this.player = new Player(this.level.spawnX, this.level.spawnY, stats);
         this.levelStartStats = { ...stats };
         this.camX = 0;
+        this.fade = 1;
 
-        this.enemies = this.level.enemies.map(e => new ENEMY_TYPES[e.type](e.x, e.y, e));
+        this.enemies = this.level.enemies.map(e => this.createEnemy(e.type, e.x, e.y, e));
         this.enemyProjectiles = [];
         this.boss = null;
         this.pendingBoss = this.level.boss;
+        this.stolen = false;
         this.combo = 0;
         this.comboTimer = 0;
+        const flood = this.level.flood;
+        this.flood = flood && {
+            x: -400,
+            speed: flood.speed,
+            delay: flood.delay,
+            stopX: (this.level.boss ? this.level.boss.arenaX : this.level.width) - 250,
+            started: false,
+        };
 
         this.collectibles = this.level.collectibles.map(c => new Collectible(c.x, c.y, c.type));
         this.totalCollectibles = this.collectibles.filter(c => STAR_TYPES.has(c.type)).length;
@@ -297,7 +514,7 @@ class Game {
         this.particles = [];
 
         this.state = 'playing';
-        this.overlay.classList.add('hidden');
+        this.hideOverlay();
         this.announce(this.level.name);
         Sound.music('level');
         this.updateHUD();
@@ -309,25 +526,24 @@ class Game {
 
     handleInput() {
         const input = this.input;
-        if (input.isPressed('Enter')) {
-            if (this.state === 'menu') {
-                this.startLevel(0);
-            } else if (this.state === 'gameOver' || this.state === 'victory') {
-                this.showMenu();
-            } else if (this.state === 'levelComplete') {
-                this.startLevel(this.currentLevel + 1, this.playerStats());
-            }
+        const typing = !this.nameEntry.hidden;
+        if (input.isPressed('Enter') && !typing) {
+            if (this.state === 'menu') this.newGame(0);
+            else if (this.state === 'story') this.startPendingLevel();
+            else if (this.state === 'levelComplete') this.nextLevel();
+            else if (this.state === 'paused') this.resume();
+            else if (this.state === 'gameOver' || this.state === 'victory') this.showMenu();
         }
 
         if (this.state === 'menu') {
-            for (let i = 1; i <= this.progress.unlocked; i++) {
-                if (input.isPressed(`Digit${i}`)) this.startLevel(i - 1);
+            for (let i = 1; i <= Math.min(this.progress.data.unlocked, levels.length); i++) {
+                if (input.isPressed(`Digit${i}`)) this.newGame(i - 1);
             }
         }
 
         if (input.isPressed('Escape')) {
-            if (this.state === 'playing') this.state = 'paused';
-            else if (this.state === 'paused') this.state = 'playing';
+            if (this.state === 'playing') this.pause();
+            else if (this.state === 'paused') this.resume();
         }
 
         if (input.isPressed('KeyM')) {
@@ -335,7 +551,7 @@ class Game {
         }
 
         if (input.isPressed('KeyR') && (this.state === 'playing' || this.state === 'paused')) {
-            this.startLevel(this.currentLevel, this.levelStartStats);
+            this.restartLevel();
         }
     }
 
@@ -358,6 +574,8 @@ class Game {
             return;
         }
 
+        if (this.state === 'exiting') this.updateExit();
+
         if (this.state !== 'playing') {
             this.particles.forEach(p => p.update());
             this.particles = this.particles.filter(p => p.life > 0);
@@ -366,6 +584,7 @@ class Game {
         }
 
         this.levelTime++;
+        if (this.fade > 0) this.fade = Math.max(0, this.fade - 0.04);
         const level = this.level;
         const player = this.player;
         level.update(this.levelTime);
@@ -383,6 +602,7 @@ class Game {
         this.handleDamageToPlayer();
         this.handleCollectibles();
         this.handleCheckpoints();
+        this.updateFlood();
         this.updateBossFight();
 
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
@@ -394,8 +614,7 @@ class Game {
         } else if (this.exitOpen && Collision.aabb(player.getBounds(), {
             x: level.exitX, y: level.exitY, width: level.exitWidth, height: level.exitHeight
         })) {
-            player.score += 50 * player.lives;
-            this.showLevelComplete();
+            this.startExit();
         }
 
         this.updateCamera();
@@ -420,6 +639,22 @@ class Game {
         this.input.clear();
     }
 
+    // Freddy entra por la puerta: tira de la cisterna y la pantalla funde a negro.
+    startExit() {
+        this.state = 'exiting';
+        this.exitTimer = 0;
+        this.player.score += 50 * this.player.lives;
+        this.progress.save(); // pisotones acumulados
+        Sound.music(null);
+        Sound.play('flush');
+    }
+
+    updateExit() {
+        this.exitTimer++;
+        this.fade = Math.min(1, Math.max(0, (this.exitTimer - 20) / 40));
+        if (this.exitTimer >= 70) this.showLevelComplete();
+    }
+
     // La cámara sigue a Freddy mirando un poco hacia delante; en la arena del jefe queda fija.
     updateCamera() {
         const level = this.level;
@@ -428,6 +663,26 @@ class Game {
         const clamped = Math.max(level.leftWall, Math.min(max, target));
         this.camX += (clamped - this.camX) * 0.1;
         this.camX = Math.max(0, Math.min(max, this.camX));
+    }
+
+    // Riada (nivel 4): avanza desde la izquierda, arrastra a los enemigos y hace daño a Freddy.
+    updateFlood() {
+        const flood = this.flood;
+        if (!flood || this.levelTime < flood.delay) return;
+        if (!flood.started) {
+            flood.started = true;
+            this.announce('¡LA RIADA! ¡CORRE!');
+            this.triggerScreenShake(10);
+            Sound.play('flood');
+        }
+        flood.x = Math.min(flood.stopX, flood.x + flood.speed);
+
+        const player = this.player;
+        if (player.respawned) flood.x = Math.min(flood.x, player.x - 300);
+        if (!player.dead && player.x < flood.x - 10) this.hurtPlayer(player.x - 100);
+        this.enemies.forEach(e => {
+            if (!e.isBoss && !e.dying && e.x + e.width < flood.x) e.takeDamage(99);
+        });
     }
 
     hitEnemy(enemy, damage, color, fromX) {
@@ -444,6 +699,8 @@ class Game {
         Sound.play('kill');
         this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
         this.comboTimer = 180;
+        if (this.combo >= 5) this.unlockAchievement('combo5');
+        if (enemy.achievement) this.unlockAchievement(enemy.achievement);
         const points = enemy.score * Math.min(this.combo, 5);
         this.player.score += points;
         this.spawnText(cx, enemy.y, this.combo > 1 ? `+${points} x${this.combo}` : `+${points}`);
@@ -488,23 +745,26 @@ class Game {
         }
     }
 
+    // heavy = golpe de jefe: Freddy acaba derribado.
+    hurtPlayer(fromX, heavy = false) {
+        const player = this.player;
+        if (!player.takeDamage(1, fromX, heavy)) return;
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.spawnParticles(player.x + player.width / 2, player.y + player.height / 2, heavy ? '#6d4c41' : '#e74c3c');
+        this.triggerScreenShake(heavy ? 12 : 8);
+        this.triggerFlash();
+    }
+
     handleDamageToPlayer() {
         const player = this.player;
         if (player.dead) return;
         const bounds = player.getBounds();
-        const hurt = (fromX, heavy) => {
-            if (!player.takeDamage(1, fromX, heavy)) return;
-            this.combo = 0;
-            this.comboTimer = 0;
-            this.spawnParticles(player.x + player.width / 2, player.y + player.height / 2, heavy ? '#6d4c41' : '#e74c3c');
-            this.triggerScreenShake(heavy ? 12 : 8);
-            this.triggerFlash();
-        };
 
         this.enemies.forEach(enemy => {
             if (enemy.dying) return;
             const attack = enemy.getAttackBounds();
-            if (attack && Collision.aabb(bounds, attack)) hurt(enemy.x + enemy.width / 2, true);
+            if (attack && Collision.aabb(bounds, attack)) this.hurtPlayer(enemy.x + enemy.width / 2, true);
             if (!Collision.aabb(bounds, enemy.getBounds())) return;
 
             // Pisotón: caer sobre el enemigo le hace daño y rebota.
@@ -514,16 +774,17 @@ class Game {
                 player.invincibleTimer = Math.max(player.invincibleTimer, 12);
                 player.jumpsLeft = player.maxJumps - 1;
                 Sound.play('stomp');
+                if (++this.progress.data.stats.stomps >= 25) this.unlockAchievement('stomper');
                 this.hitEnemy(enemy, 1, '#ffd700');
                 return;
             }
-            hurt(enemy.x + enemy.width / 2, enemy.heavy);
+            this.hurtPlayer(enemy.x + enemy.width / 2, enemy.heavy);
         });
 
         this.enemyProjectiles.forEach(p => {
             if (p.active && Collision.aabb(bounds, p.getBounds())) {
                 p.active = false;
-                hurt(p.x, p.type === 'goo');
+                this.hurtPlayer(p.x, p.type === 'goo');
             }
         });
 
@@ -582,7 +843,8 @@ class Game {
             const b = this.pendingBoss;
             this.pendingBoss = null;
             level.leftWall = b.arenaX;
-            this.boss = new ENEMY_TYPES[b.type](b.x, b.y, b);
+            this.boss = this.createEnemy(b.type, b.x, b.y, b);
+            this.boss.arenaX = b.arenaX;
             this.enemies.push(this.boss);
             this.announce(`¡JEFE: ${this.boss.name}!`);
             this.triggerScreenShake(10);
@@ -689,6 +951,8 @@ class Game {
         document.getElementById('collectibles').textContent = `★ ${this.collectedCount}/${this.totalCollectibles}`;
     }
 
+    // --- Dibujo ------------------------------------------------------------------
+
     draw() {
         const ctx = this.ctx;
         ctx.save();
@@ -706,13 +970,14 @@ class Game {
             this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, camX);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
                 const grounded = [...this.collectibles.filter(c => !c.collected), ...this.enemies];
-                if (!this.player.dead) grounded.push(this.player);
+                if (!this.player.dead && this.state !== 'exiting') grounded.push(this.player);
                 this.scenery.drawShadows(ctx, grounded, this.level.platforms);
                 this.collectibles.forEach(c => c.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
                 this.enemyProjectiles.forEach(p => p.draw(ctx));
-                this.player.draw(ctx, this.freddySheet);
+                this.drawPlayer(ctx);
             }
+            if (this.flood && this.flood.started) this.drawFlood(ctx, camX);
             this.particles.forEach(p => p.draw(ctx));
             ctx.restore();
             this.scenery.drawForeground(ctx);
@@ -726,9 +991,57 @@ class Game {
             if (this.boss) this.drawBossBar();
             if (this.combo > 1) this.drawCombo();
             if (this.banner) this.drawBanner();
-            if (this.state === 'paused') this.drawPause();
         }
 
+        if (this.fade > 0) {
+            ctx.globalAlpha = this.fade;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-10, -10, 980, 740);
+            ctx.globalAlpha = 1;
+        }
+
+        ctx.restore();
+    }
+
+    // Al cruzar la puerta, Freddy encoge hacia el centro de la puerta y desaparece.
+    drawPlayer(ctx) {
+        if (this.state !== 'exiting') {
+            this.player.draw(ctx, this.freddySheet);
+            return;
+        }
+        const t = Math.min(1, this.exitTimer / 30);
+        const level = this.level;
+        const doorX = level.exitX + level.exitWidth / 2;
+        const doorY = level.exitY + level.exitHeight;
+        ctx.save();
+        ctx.globalAlpha = 1 - t;
+        ctx.translate(doorX, doorY);
+        ctx.scale(1 - t * 0.6, 1 - t * 0.6);
+        ctx.translate(-doorX, -doorY);
+        this.player.draw(ctx, this.freddySheet);
+        ctx.restore();
+    }
+
+    drawFlood(ctx, camX) {
+        const edge = this.flood.x;
+        if (edge < camX - 40) return;
+        const t = this.levelTime;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(camX - 20, -10);
+        for (let y = -10; y <= 740; y += 20) {
+            ctx.lineTo(edge + Math.sin(y * 0.05 + t * 0.12) * 14 + Math.sin(y * 0.13 - t * 0.07) * 6, y);
+        }
+        ctx.lineTo(camX - 20, 740);
+        ctx.closePath();
+        const g = ctx.createLinearGradient(edge - 200, 0, edge, 0);
+        g.addColorStop(0, 'rgba(70, 45, 20, 0.95)');
+        g.addColorStop(1, 'rgba(120, 85, 40, 0.85)');
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(220, 200, 150, 0.7)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
         ctx.restore();
     }
 
@@ -775,18 +1088,6 @@ class Game {
         ctx.strokeText(this.banner.text, 480, 300);
         ctx.fillText(this.banner.text, 480, 300);
         ctx.restore();
-    }
-
-    drawPause() {
-        const ctx = this.ctx;
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx.fillRect(-10, -10, 980, 740);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 48px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('PAUSA', 480, 340);
-        ctx.font = '20px sans-serif';
-        ctx.fillText('ESC para seguir · R para reiniciar el nivel · M para el sonido', 480, 385);
     }
 
     drawMenuBackground() {
@@ -842,9 +1143,4 @@ class Game {
         this.draw();
         requestAnimationFrame(t => this.gameLoop(t));
     }
-}
-
-function formatTime(seconds) {
-    const s = Math.floor(seconds);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
