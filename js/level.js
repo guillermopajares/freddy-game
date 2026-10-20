@@ -35,47 +35,15 @@ class Level {
         return { x: h.x + 10, y: h.y + 12, width: h.width - 20, height: 18 };
     }
 
-    draw(ctx, backgrounds, sheet, exitOpen) {
-        const bg = backgrounds[this.background];
-        if (bg) {
-            // Algunos fondos traen ~28 px de margen blanco a la izquierda
-            ctx.drawImage(bg, 30, 0, bg.width - 30, bg.height, 0, 0, 960, 720);
-        } else {
-            const gradient = ctx.createLinearGradient(0, 0, 0, 720);
-            gradient.addColorStop(0, '#87ceeb');
-            gradient.addColorStop(1, '#98fb98');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 960, 720);
-        }
-
-        this.platforms.forEach(p => {
-            ctx.fillStyle = p.moveX ? '#607d8b' : (p.color || '#8b4513');
-            ctx.beginPath();
-            ctx.roundRect(p.x, p.y, p.width, p.height, 4);
-            ctx.fill();
-
-            ctx.fillStyle = p.moveX ? '#90a4ae' : '#a0522d';
-            ctx.fillRect(p.x, p.y, p.width, 4);
-
-            if (p.grass) {
-                ctx.fillStyle = '#228b22';
-                ctx.fillRect(p.x, p.y - 6, p.width, 8);
-            }
-        });
+    draw(ctx, scenery, sheet, exitOpen) {
+        scenery.drawBackground(ctx);
+        scenery.drawPlatforms(ctx, this.platforms);
 
         this.hazards.forEach(h => {
             sheet.draw(ctx, 'mound', 0, h.x + h.width / 2, h.y + 30, h.width / 318);
         });
 
-        ctx.fillStyle = exitOpen ? '#4caf50' : '#555';
-        ctx.beginPath();
-        ctx.roundRect(this.exitX, this.exitY, this.exitWidth, this.exitHeight, 8);
-        ctx.fill();
-
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${exitOpen ? 14 : 10}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText(exitOpen ? 'EXIT' : 'LOCKED', this.exitX + this.exitWidth / 2, this.exitY + this.exitHeight / 2 + 5);
+        scenery.drawExit(ctx, this.exitX, this.exitY, this.exitWidth, this.exitHeight, exitOpen);
     }
 }
 

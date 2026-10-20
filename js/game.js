@@ -10,6 +10,7 @@ class Game {
 
         this.input = new InputHandler();
         this.backgrounds = {};
+        this.scenery = new Scenery(this.backgrounds);
         this.state = 'loading';
         this.currentLevel = 0;
         this.player = null;
@@ -206,6 +207,7 @@ class Game {
         this.currentLevel = levelIndex;
         this.level = levels[levelIndex];
         this.level.reset();
+        this.scenery.setLevel(this.level);
         this.levelTime = 0;
         this.player = new Player(this.level.spawnX, this.level.spawnY, stats);
         this.levelStartStats = { ...stats };
@@ -274,6 +276,7 @@ class Game {
 
         this.levelTime++;
         this.level.update(this.levelTime);
+        this.scenery.update(this.player);
         const player = this.player;
         player.update(this.input, this.level.platforms);
         this.enemies.forEach(e => e.update(player, this.level.platforms, this));
@@ -536,14 +539,18 @@ class Game {
         if (this.state === 'menu') {
             this.drawMenuBackground();
         } else if (this.level) {
-            this.level.draw(ctx, this.backgrounds, this.freddySheet, this.exitOpen);
+            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
+                const grounded = [...this.collectibles.filter(c => !c.collected), ...this.enemies];
+                if (!this.player.dead) grounded.push(this.player);
+                this.scenery.drawShadows(ctx, grounded, this.level.platforms);
                 this.collectibles.forEach(c => c.draw(ctx));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
                 this.enemyProjectiles.forEach(p => p.draw(ctx));
                 this.player.draw(ctx, this.freddySheet);
             }
             this.particles.forEach(p => p.draw(ctx));
+            this.scenery.drawForeground(ctx);
 
             if (this.flashAlpha > 0) {
                 ctx.globalAlpha = this.flashAlpha;
