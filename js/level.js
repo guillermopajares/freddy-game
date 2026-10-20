@@ -51,7 +51,7 @@ class Level {
     }
 
     // Capa de mundo: se dibuja con la cámara ya aplicada.
-    draw(ctx, scenery, sheet, exitOpen, time, camX) {
+    draw(ctx, scenery, sheet, exitOpen, camX) {
         scenery.drawPlatforms(ctx, this.platforms, camX);
 
         this.hazards.forEach(h => {
@@ -59,7 +59,7 @@ class Level {
         });
 
         this.checkpoints.forEach(c => this.drawCheckpoint(ctx, c));
-        this.drawPortal(ctx, exitOpen, time);
+        scenery.drawExit(ctx, this.exitX, this.exitY, this.exitWidth, this.exitHeight, exitOpen);
     }
 
     // Checkpoint: desatascador clavado con banderín (verde al activarlo).
@@ -80,43 +80,6 @@ class Level {
         ctx.lineTo(c.x + 34, c.y - 60);
         ctx.lineTo(c.x + 2, c.y - 50);
         ctx.fill();
-    }
-
-    // Salida: portal verde a lo Rick y Morty (apagado mientras haya jefe).
-    drawPortal(ctx, open, time) {
-        ctx.save();
-        ctx.translate(this.exitX + this.exitWidth / 2, this.exitY + this.exitHeight / 2);
-        if (open) {
-            const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 46);
-            glow.addColorStop(0, '#f4ffe0');
-            glow.addColorStop(0.45, '#7CFC00');
-            glow.addColorStop(1, 'rgba(30, 140, 20, 0)');
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 38, 48, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#c6ff8a';
-            ctx.lineWidth = 3;
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.ellipse(0, 0, 30 - i * 8, 40 - i * 11, time * 0.06 + i * 2, 0.3, 4.6);
-                ctx.stroke();
-            }
-        } else {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 4;
-            ctx.setLineDash([8, 6]);
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 30, 40, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.font = '22px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🔒', 0, 0);
-        }
-        ctx.restore();
     }
 }
 

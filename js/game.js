@@ -154,7 +154,7 @@ class Game {
     showLevelComplete() {
         this.state = 'levelComplete';
         Sound.music(null);
-        Sound.play('portal');
+        Sound.play('flush');
 
         const stars = this.collectedCount >= this.totalCollectibles ? 3 :
                       this.collectedCount >= this.totalCollectibles * 0.6 ? 2 : 1;
@@ -165,7 +165,7 @@ class Game {
         this.recordScore(this.player.score);
         this.saveProgress();
 
-        this.showOverlay('level-complete-title', '¡NIVEL SUPERADO!', 'Pulsa ENTER para cruzar el portal',
+        this.showOverlay('level-complete-title', '¡NIVEL SUPERADO!', 'Pulsa ENTER para cruzar la puerta',
             `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(Math.min(best.time, time))})`);
         this.overlayStars.innerHTML = Array(3).fill(0).map((_, i) =>
             `<span class="${i < stars ? 'star-filled' : 'star-empty'}">★</span>`
@@ -562,7 +562,7 @@ class Game {
 
         if (this.boss.markedForDeletion) {
             this.boss = null;
-            this.announce('¡PORTAL ABIERTO!');
+            this.announce('¡PUERTA ABIERTA!');
             Sound.music('level');
             return;
         }
@@ -672,7 +672,7 @@ class Game {
 
             ctx.save();
             ctx.translate(-camX, 0);
-            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, this.levelTime, camX);
+            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, camX);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
                 const grounded = [...this.collectibles.filter(c => !c.collected), ...this.enemies];
                 if (!this.player.dead) grounded.push(this.player);
