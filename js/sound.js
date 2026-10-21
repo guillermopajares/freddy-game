@@ -19,6 +19,7 @@ const Sound = {
     ctx: null,
     master: null,
     muted: false,
+    volume: 0.7,
     musicName: null,
     musicTimer: null,
 
@@ -31,8 +32,13 @@ const Sound = {
         if (!AudioCtx) return;
         this.ctx = new AudioCtx();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.5;
+        this.master.gain.value = this.volume * 0.7;
         this.master.connect(this.ctx.destination);
+    },
+
+    setVolume(volume) {
+        this.volume = volume;
+        if (this.master) this.master.gain.value = volume * 0.7;
     },
 
     toggleMute() {
@@ -96,6 +102,13 @@ const Sound = {
                 [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', delay: i * 0.07 }));
                 break;
             case 'steal': this.tone(900, 0.2, { type: 'square', slide: -700, volume: 0.06 }); break;
+            case 'glitch':
+                [1800, 300, 1400, 200].forEach((f, i) => this.tone(f, 0.04, { delay: i * 0.035, volume: 0.05 }));
+                break;
+            case 'flood': this.noise(1.5, 0.2); this.tone(60, 1.5, { type: 'sawtooth', slide: 30, volume: 0.1 }); break;
+            case 'achievement':
+                [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.15, { type: 'triangle', delay: i * 0.09, volume: 0.08 }));
+                break;
             case 'enemyShot': this.tone(1200, 0.07, { slide: -800, volume: 0.04 }); break;
             case 'goo': this.tone(100, 0.15, { type: 'sine', slide: 200, volume: 0.12 }); break;
             case 'checkpoint': this.tone(659, 0.1, { type: 'triangle' }); this.tone(784, 0.2, { type: 'triangle', delay: 0.1 }); break;

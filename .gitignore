@@ -1,8 +1,8 @@
 node_modules/
-package.json
-package-lock.json
 .venv/
 __pycache__/
-*.png
-!assets/*.png
+.idea/
+.DS_Store
+# Salidas sueltas de análisis de sprites; los recursos del juego van en assets/
+/*.png
 api/

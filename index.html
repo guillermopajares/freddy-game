@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Freddy Game - Platform Adventure</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -16,7 +16,7 @@
                 <span id="ammo"></span>
             </div>
             <div id="hud-center">
-                <span id="level">LEVEL 1</span>
+                <span id="level">NIVEL 1</span>
             </div>
             <div id="hud-right">
                 <span id="power"></span>
@@ -26,57 +26,80 @@
         <div id="overlay">
             <div id="overlay-content">
                 <h1 id="overlay-title">FREDDY GAME</h1>
-                <p id="overlay-subtitle">A Platform Adventure</p>
+                <p id="overlay-subtitle">Desatasca el código</p>
                 <div id="overlay-divider"></div>
-                <p id="overlay-text">Press ENTER to start</p>
+                <p id="overlay-text"></p>
                 <div id="overlay-stars"></div>
                 <div id="overlay-score"></div>
-                <div id="controls-info">
-                    <div class="key-row">
-                        <span class="key">W</span>
-                        <span class="key-desc">Saltar (x2, en pared)</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">A</span><span class="key">D</span>
-                        <span class="key-desc">Moverse</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">S</span>
-                        <span class="key-desc">Agacharse / caída rápida</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">SHIFT</span>
-                        <span class="key-desc">Dash (invulnerable)</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">SPC</span>
-                        <span class="key-desc">Papel (mantener: rollo gigante)</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">F</span>
-                        <span class="key-desc">Desatascador (para proyectiles)</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">ESC</span>
-                        <span class="key-desc">Pausa</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">R</span>
-                        <span class="key-desc">Reiniciar nivel</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">M</span>
-                        <span class="key-desc">Sonido on/off</span>
-                    </div>
-                    <div class="key-row">
-                        <span class="key">🎮</span>
-                        <span class="key-desc">Mando compatible</span>
-                    </div>
+                <form id="name-entry" hidden>
+                    <label>¡Nuevo récord! Tu nombre:
+                        <input id="name-input" maxlength="10" autocomplete="off" required>
+                    </label>
+                    <button type="submit">Guardar</button>
+                </form>
+                <div id="overlay-buttons"></div>
+
+                <div id="panels">
+                    <details id="settings">
+                        <summary>Ajustes</summary>
+                        <label>Volumen <input type="range" id="opt-volume" min="0" max="100" step="10"></label>
+                        <label><input type="checkbox" id="opt-shake"> Temblor de pantalla</label>
+                        <label><input type="checkbox" id="opt-flash"> Destellos al recibir daño</label>
+                        <label>Dificultad
+                            <select id="opt-difficulty">
+                                <option value="easy">Fácil (5 vidas, enemigos débiles)</option>
+                                <option value="normal">Normal</option>
+                                <option value="hard">Difícil (todos élite)</option>
+                            </select>
+                        </label>
+                    </details>
+                    <details id="controls">
+                        <summary>Controles</summary>
+                        <div id="controls-info">
+                            <div class="key-row"><span class="key">W</span><span class="key-desc">Saltar (x2, en pared)</span></div>
+                            <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key-desc">Moverse</span></div>
+                            <div class="key-row"><span class="key">S</span><span class="key-desc">Agacharse / caída rápida</span></div>
+                            <div class="key-row"><span class="key">SHIFT</span><span class="key-desc">Dash (invulnerable)</span></div>
+                            <div class="key-row"><span class="key">SPC</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
+                            <div class="key-row"><span class="key">F</span><span class="key-desc">Desatascador (para proyectiles)</span></div>
+                            <div class="key-row"><span class="key">ESC</span><span class="key-desc">Pausa</span></div>
+                            <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
+                            <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
+                            <div class="key-row"><span class="key">🎮</span><span class="key-desc">Mando compatible</span></div>
+                        </div>
+                    </details>
+                    <details id="achievements">
+                        <summary>Logros</summary>
+                        <ul id="achievement-list"></ul>
+                    </details>
+                    <details id="ranking">
+                        <summary>Ranking</summary>
+                        <ol id="ranking-list"></ol>
+                    </details>
                 </div>
             </div>
         </div>
     </div>
-    <script src="js/assets.js"></script>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <!-- Solo visibles en pantallas táctiles (ver css) -->
+    <div id="touch-controls">
+        <div class="touch-pad">
+            <button data-code="KeyA" aria-label="Izquierda">◀</button>
+            <button data-code="KeyS" aria-label="Agacharse">▼</button>
+            <button data-code="KeyD" aria-label="Derecha">▶</button>
+        </div>
+        <div class="touch-pad">
+            <button data-code="ShiftLeft" aria-label="Dash">💨</button>
+            <button data-code="KeyF" aria-label="Desatascador">🪠</button>
+            <button data-code="Space" aria-label="Papel">🧻</button>
+            <button data-code="KeyW" aria-label="Saltar" class="big">▲</button>
+        </div>
+        <button id="touch-pause" data-code="Escape" aria-label="Pausa">II</button>
+    </div>
+
+    <script src="js/asset-files.js"></script>
     <script src="js/sprite.js"></script>
     <script src="js/input.js"></script>
     <script src="js/sound.js"></script>
@@ -87,6 +110,8 @@
     <script src="js/player.js"></script>
     <script src="js/scenery.js"></script>
     <script src="js/level.js"></script>
+    <script src="js/story.js"></script>
+    <script src="js/progress.js"></script>
     <script src="js/game.js"></script>
     <script src="js/main.js"></script>
 </body>

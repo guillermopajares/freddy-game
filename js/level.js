@@ -27,6 +27,7 @@ class Level {
         this.enemies = data.enemies.map(([type, x, y, opts]) => ({ type, x, y, ...opts }));
         this.collectibles = data.collectibles.map(([type, x, y]) => ({ type, x, y }));
         this.boss = data.boss || null;
+        this.flood = data.flood || null;
         this.leftWall = 0;
     }
 
@@ -110,17 +111,19 @@ const levels = [
     new Level({
         name: 'Nivel 2: La Escalada',
         background: 'bg_02',
-        width: 2400,
+        width: 3360,
         spawn: [80, 530],
-        exit: [2320, 570],
-        ground: [[0, 400], [1000, 300], [2000, 400]],
+        exit: [3280, 570],
+        ground: [[0, 400], [1000, 300], [2000, 1360]],
         platforms: [
             [450, 580, 120], [620, 500, 110], [800, 420, 120], [600, 330, 120], [820, 250, 140],
             [1350, 560, 120], [1520, 480, 120, 60, 0.02], [1720, 560, 140],
             [1350, 380, 120], [1560, 300, 120], [1780, 380, 140],
+            // Arena del Rey Bug
+            [2520, 540, 130], [2760, 450, 160], [3050, 540, 130], [2640, 340, 110], [2920, 340, 110],
         ],
         hazards: [[1150, 650, 70], [2150, 650, 70]],
-        checkpoints: [[1050, 650]],
+        checkpoints: [[1050, 650], [2340, 650]],
         enemies: [
             ['CodeBug', 200, 570], ['CodeBug', 830, 340], ['Error404', 700, 200],
             ['CodeBug', 1220, 570, { elite: true }], ['Error404', 1600, 400],
@@ -129,8 +132,9 @@ const levels = [
         collectibles: [
             ['coin', 480, 540], ['coin', 650, 460], ['paper', 650, 290], ['star', 870, 210],
             ['coin', 1380, 520], ['triple', 1590, 260], ['star', 1820, 340], ['coin', 1760, 520],
-            ['paper', 2050, 610], ['star', 1390, 340],
+            ['paper', 2050, 610], ['star', 1390, 340], ['heart', 2670, 300],
         ],
+        boss: { type: 'BossBug', x: 3200, y: 480, arenaX: 2400 },
     }),
 
     new Level({
@@ -164,18 +168,22 @@ const levels = [
     new Level({
         name: 'Nivel 4: El Desagüe',
         background: 'bg_04',
-        width: 2880,
+        width: 3840,
         spawn: [80, 530],
-        exit: [2800, 570],
-        ground: [[0, 350], [1300, 300], [2500, 380]],
+        exit: [3760, 570],
+        ground: [[0, 350], [1300, 300], [2500, 1340]],
+        // La riada de aguas sucias avanza desde la izquierda y se detiene antes de la arena
+        flood: { delay: 180, speed: 1.6 },
         platforms: [
             [420, 600, 100], [580, 540, 110, 80, 0.02], [800, 480, 120], [980, 560, 120, 60, 0.025],
             [1150, 500, 100], [800, 300, 120], [1050, 250, 120],
             [1650, 560, 100, 90, 0.018], [1850, 480, 110], [2020, 400, 120, 70, 0.022],
             [2220, 480, 110], [2380, 560, 90], [1900, 290, 120],
+            // Arena del Glitch 404
+            [3000, 540, 130], [3250, 450, 150], [3550, 540, 130], [3120, 330, 110], [3420, 330, 110],
         ],
         hazards: [[1420, 650, 70], [1880, 480, 50], [2620, 650, 70]],
-        checkpoints: [[1320, 650], [2520, 650]],
+        checkpoints: [[1320, 650], [2520, 650], [2830, 650]],
         enemies: [
             ['Error404', 600, 380], ['CodeBug', 830, 400], ['Error404', 1100, 330, { elite: true }],
             ['CodeBug', 1450, 570], ['CodeBug', 1540, 570, { elite: true }], ['Error404', 1750, 350],
@@ -185,7 +193,9 @@ const levels = [
             ['coin', 450, 560], ['paper', 830, 440], ['star', 850, 260], ['coin', 1180, 460],
             ['star', 1080, 210], ['paper', 1500, 610], ['coin', 1860, 440], ['star', 1930, 250],
             ['shield', 2240, 440], ['heart', 2560, 610], ['coin', 2700, 610], ['triple', 1350, 610],
+            ['star', 3290, 410],
         ],
+        boss: { type: 'BossGlitch', x: 3400, y: 300, arenaX: 2880 },
     }),
 
     new Level({

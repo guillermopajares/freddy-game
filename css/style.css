@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Bungee+Shade&family=Press+Start+2P&family=Fredoka+One&display=swap');
 
+[hidden] {
+    display: none !important;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -16,8 +20,12 @@ body {
     font-family: 'Fredoka One', 'Segoe UI', sans-serif;
 }
 
+/* Tamaño lógico fijo 960x720; main.js ajusta --scale para que quepa en cualquier pantalla */
 #game-container {
-    position: relative;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
     width: 960px;
     height: 720px;
     border: 3px solid #3a3a3a;
@@ -33,7 +41,6 @@ body {
     display: block;
     width: 100%;
     height: 100%;
-    image-rendering: pixelated;
 }
 
 #hud {
@@ -106,8 +113,10 @@ body {
     text-align: center;
     color: #fff;
     pointer-events: auto;
-    max-width: 600px;
-    padding: 40px;
+    max-width: 640px;
+    max-height: 700px;
+    overflow-y: auto;
+    padding: 24px 40px;
 }
 
 #overlay.hidden {
@@ -273,4 +282,184 @@ body {
 
 #hud span:empty {
     display: none;
+}
+
+/* --- Botones, paneles y formularios del overlay --- */
+#overlay-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 8px 0 16px;
+}
+
+#overlay-buttons button, #name-entry button {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 16px;
+    color: #fff;
+    background: linear-gradient(180deg, #ff8c42 0%, #e85d26 100%);
+    border: 2px solid #ffb07a;
+    border-radius: 10px;
+    padding: 8px 18px;
+    cursor: pointer;
+}
+
+#overlay-buttons button.secondary {
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+}
+
+#overlay-buttons button:hover, #name-entry button:hover {
+    filter: brightness(1.15);
+}
+
+#name-entry {
+    margin: 0 0 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+#name-entry input {
+    font: inherit;
+    width: 140px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 2px solid #4a4a4a;
+    background: #111;
+    color: #fff;
+}
+
+#panels {
+    text-align: left;
+}
+
+#panels details {
+    margin-top: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 8px 14px;
+}
+
+#panels summary {
+    cursor: pointer;
+    color: #ff8c42;
+}
+
+#settings label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+    color: #ddd;
+}
+
+#settings select {
+    font: inherit;
+    background: #111;
+    color: #fff;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+
+#achievement-list, #ranking-list {
+    margin: 8px 0 4px 22px;
+    color: #ddd;
+    line-height: 1.7;
+}
+
+#achievement-list {
+    list-style: none;
+    margin-left: 0;
+}
+
+#achievement-list .locked {
+    opacity: 0.45;
+}
+
+/* --- Controles táctiles: solo con dedo --- */
+#touch-controls {
+    display: none;
+}
+
+@media (pointer: coarse) {
+    #touch-controls {
+        display: block;
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 50;
+    }
+
+    .touch-pad {
+        position: absolute;
+        bottom: 16px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+    }
+
+    .touch-pad:first-child {
+        left: 16px;
+    }
+
+    .touch-pad:nth-child(2) {
+        right: 16px;
+    }
+
+    #touch-controls button {
+        pointer-events: auto;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+        font-size: 24px;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    #touch-controls button.big {
+        width: 76px;
+        height: 76px;
+    }
+
+    #touch-controls button:active {
+        background: rgba(255, 140, 66, 0.5);
+    }
+
+    #touch-pause {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 16px !important;
+    }
+}
+
+/* Aviso de logros: por encima de todo, también de los menús */
+#toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translate(-50%, calc(-100% - 24px));
+    background: rgba(20, 20, 20, 0.92);
+    border: 2px solid #ffd700;
+    border-radius: 12px;
+    padding: 10px 18px;
+    color: #fff;
+    font-size: 16px;
+    z-index: 100;
+    transition: transform 0.35s ease;
+    pointer-events: none;
+}
+
+#toast.show {
+    transform: translate(-50%, 0);
 }

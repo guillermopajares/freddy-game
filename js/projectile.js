@@ -142,4 +142,7 @@ class Projectile {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = Projectile;
+if (typeof module !== 'undefined') {
+    module.exports = Projectile;
+    module.exports.PROJECTILE_TYPES = PROJECTILE_TYPES;
+}
