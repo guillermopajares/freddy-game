@@ -7,76 +7,194 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="gameCanvas" tabindex="0"></canvas>
-        <div id="hud">
-            <div id="hud-left">
-                <span id="lives"></span>
-                <span id="score">Puntos: 0</span>
-                <span id="ammo"></span>
-            </div>
-            <div id="hud-center">
-                <span id="level">NIVEL 1</span>
-            </div>
-            <div id="hud-right">
-                <span id="power"></span>
-                <span id="collectibles"></span>
+    <!-- Mueble de recreativa alrededor del juego (oculto en pantallas táctiles, ver css) -->
+    <div id="cabinet">
+        <!-- Laterales vistos de frente: suben por encima de la marquesina, se curvan hacia dentro
+             junto a la pantalla y se abren hacia el panel de mandos. Coordenadas del mueble (1084 de ancho). -->
+        <svg id="cab-frame" viewBox="0 0 1084 1600" aria-hidden="true">
+            <defs>
+                <!-- Negro mate: apenas más claro hacia el canto exterior, que recibe la luz -->
+                <linearGradient id="cab-post" x1="0" x2="1">
+                    <stop offset="0" stop-color="#1f1f23"/>
+                    <stop offset="0.25" stop-color="#19191c"/>
+                    <stop offset="0.7" stop-color="#121215"/>
+                    <stop offset="1" stop-color="#08080a"/>
+                </linearGradient>
+                <!-- Franja de luz muy suave en la cara frontal del lateral -->
+                <linearGradient id="cab-band" x1="0" x2="1">
+                    <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+                    <stop offset="0.38" stop-color="#fff" stop-opacity="0.008"/>
+                    <stop offset="0.52" stop-color="#fff" stop-opacity="0.035"/>
+                    <stop offset="0.62" stop-color="#fff" stop-opacity="0.015"/>
+                    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+                </linearGradient>
+                <!-- Reflejo vertical del foco del techo -->
+                <linearGradient id="cab-sheen" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0" stop-color="#fff" stop-opacity="0.05"/>
+                    <stop offset="0.18" stop-color="#fff" stop-opacity="0.015"/>
+                    <stop offset="0.55" stop-color="#fff" stop-opacity="0.025"/>
+                    <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+                </linearGradient>
+                <!-- Grano muy fino del laminado -->
+                <filter id="cab-grain" x="0" y="0" width="100%" height="100%">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.9 0.02" numOctaves="2" seed="4"/>
+                    <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0"/>
+                    <feComposite in2="SourceGraphic" operator="in"/>
+                </filter>
+                <!-- Tabla superior: canto redondeado que recibe la luz arriba -->
+                <linearGradient id="cab-board" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0" stop-color="#36363c"/>
+                    <stop offset="0.15" stop-color="#2a2a2f"/>
+                    <stop offset="0.5" stop-color="#1c1c1f"/>
+                    <stop offset="0.85" stop-color="#121214"/>
+                    <stop offset="1" stop-color="#050506"/>
+                </linearGradient>
+                <linearGradient id="cab-board-shadow" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0" stop-color="#000" stop-opacity="0.8"/>
+                    <stop offset="1" stop-color="#000" stop-opacity="0"/>
+                </linearGradient>
+                <path id="cab-post-shape" d="M 24 0 L 32 0 Q 40 0 40 8 L 40 1600 L 0 1600 L 0 980 C 0 910 18 880 18 800 L 18 440 C 18 320 0 280 0 200 L 0 24 Q 0 0 24 0 Z"/>
+                <path id="cab-post-edge" d="M 40 8 Q 40 0 32 0 L 24 0 Q 0 0 0 24 L 0 200 C 0 280 18 320 18 440 L 18 800 C 18 880 0 910 0 980 L 0 1600"/>
+            </defs>
+            <!-- Tabla superior entre los dos laterales, encima de la marquesina -->
+            <g class="cab-top-board">
+                <rect x="26" y="12" width="1032" height="36" rx="6" fill="url(#cab-board)"/>
+                <rect x="26" y="13.5" width="1032" height="2" fill="#fff" opacity="0.12"/>
+                <rect x="26" y="28" width="1032" height="1" fill="#fff" opacity="0.03"/>
+                <rect x="26" y="46" width="1032" height="2" fill="#000"/>
+                <rect x="26" y="48" width="1032" height="14" fill="url(#cab-board-shadow)"/>
+            </g>
+            <g id="cab-post-left">
+                <use href="#cab-post-shape" fill="url(#cab-post)"/>
+                <use href="#cab-post-shape" fill="url(#cab-band)"/>
+                <use href="#cab-post-shape" fill="url(#cab-sheen)"/>
+                <use href="#cab-post-shape" fill="#fff" filter="url(#cab-grain)"/>
+                <!-- Sombra donde el lateral se encuentra con la pantalla -->
+                <rect x="34" y="0" width="6" height="1600" fill="#000" opacity="0.55"/>
+                <!-- Moldura en T: tubo redondeado hecho con trazos de grosor decreciente -->
+                <use href="#cab-post-edge" class="cab-molding m1"/>
+                <use href="#cab-post-edge" class="cab-molding m2"/>
+                <use href="#cab-post-edge" class="cab-molding m3"/>
+                <use href="#cab-post-edge" class="cab-molding m4"/>
+            </g>
+            <use href="#cab-post-left" transform="translate(1084 0) scale(-1 1)"/>
+        </svg>
+
+        <!-- Marquesina retroiluminada -->
+        <div id="cab-marquee" aria-hidden="true">
+            <div class="cab-stripes"><i></i><i></i><i></i><i></i></div>
+            <div class="cab-marquee-text">
+                <small>FREDDY GAME™</small>
+                <strong>ARCADE</strong>
+                <em>DESATASCADOR-1.0</em>
+                <b>CLASSIC ARCADE MACHINE</b>
             </div>
         </div>
-        <div id="overlay">
-            <div id="overlay-content">
-                <h1 id="overlay-title">FREDDY GAME</h1>
-                <p id="overlay-subtitle">Desatasca el código</p>
-                <div id="overlay-divider"></div>
-                <p id="overlay-text"></p>
-                <div id="overlay-stars"></div>
-                <div id="overlay-score"></div>
-                <form id="name-entry" hidden>
-                    <label>¡Nuevo récord! Tu nombre:
-                        <input id="name-input" maxlength="10" autocomplete="off" required>
-                    </label>
-                    <button type="submit">Guardar</button>
-                </form>
-                <div id="overlay-buttons"></div>
 
-                <div id="panels">
-                    <details id="settings">
-                        <summary>Ajustes</summary>
-                        <label>Volumen <input type="range" id="opt-volume" min="0" max="100" step="10"></label>
-                        <label><input type="checkbox" id="opt-shake"> Temblor de pantalla</label>
-                        <label><input type="checkbox" id="opt-flash"> Destellos al recibir daño</label>
-                        <label>Dificultad
-                            <select id="opt-difficulty">
-                                <option value="easy">Fácil (5 vidas, enemigos débiles)</option>
-                                <option value="normal">Normal</option>
-                                <option value="hard">Difícil (todos élite)</option>
-                            </select>
-                        </label>
-                    </details>
-                    <details id="controls">
-                        <summary>Controles</summary>
-                        <div id="controls-info">
-                            <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key">◀▶</span><span class="key-desc">Moverse</span></div>
-                            <div class="key-row"><span class="key">SPC</span><span class="key">W</span><span class="key">▲</span><span class="key-desc">Saltar (mantener: más alto; x2, en pared)</span></div>
-                            <div class="key-row"><span class="key">S</span><span class="key">▼</span><span class="key-desc">Agacharse / caída rápida</span></div>
-                            <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
-                            <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
-                            <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
-                            <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
-                            <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
-                            <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
-                            <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · gatillos dash · Start pausa</span></div>
-                        </div>
-                    </details>
-                    <details id="achievements">
-                        <summary>Logros</summary>
-                        <ul id="achievement-list"></ul>
-                    </details>
-                    <details id="ranking">
-                        <summary>Ranking</summary>
-                        <ol id="ranking-list"></ol>
-                    </details>
+        <div id="cab-bezel">
+            <div id="game-container">
+                <canvas id="gameCanvas" tabindex="0"></canvas>
+                <!-- Pantalla de arranque: solo al abrir la página; main.js la funde y la quita a los 2 s -->
+                <div id="boot-screen" role="status" aria-label="Cargando">
+                    <img src="assets/freddy_face.png" alt="" class="boot-face">
+                    <p class="boot-text">CARGANDO<span class="boot-dots"><i>.</i><i>.</i><i>.</i></span></p>
+                    <div class="boot-bar"><i></i></div>
                 </div>
+                <div id="hud">
+                    <div id="hud-left">
+                        <span id="lives"></span>
+                        <span id="score">Puntos: 0</span>
+                        <span id="ammo"></span>
+                    </div>
+                    <div id="hud-center">
+                        <span id="level">NIVEL 1</span>
+                    </div>
+                    <div id="hud-right">
+                        <span id="power"></span>
+                        <span id="collectibles"></span>
+                    </div>
+                </div>
+                <div id="overlay">
+                    <div id="overlay-content">
+                        <h1 id="overlay-title">FREDDY GAME</h1>
+                        <p id="overlay-subtitle">Desatasca el código</p>
+                        <div id="overlay-divider"></div>
+                        <p id="overlay-text"></p>
+                        <div id="overlay-stars"></div>
+                        <div id="overlay-score"></div>
+                        <form id="name-entry" hidden>
+                            <label>¡Nuevo récord! Tu nombre:
+                                <input id="name-input" maxlength="10" autocomplete="off" required>
+                            </label>
+                            <button type="submit">Guardar</button>
+                        </form>
+                        <div id="overlay-buttons"></div>
+
+                        <div id="panels">
+                            <details id="settings">
+                                <summary>Ajustes</summary>
+                                <label>Volumen <input type="range" id="opt-volume" min="0" max="100" step="10"></label>
+                                <label><input type="checkbox" id="opt-shake"> Temblor de pantalla</label>
+                                <label><input type="checkbox" id="opt-flash"> Destellos al recibir daño</label>
+                                <label>Dificultad
+                                    <select id="opt-difficulty">
+                                        <option value="easy">Fácil (5 vidas, enemigos débiles)</option>
+                                        <option value="normal">Normal</option>
+                                        <option value="hard">Difícil (todos élite)</option>
+                                    </select>
+                                </label>
+                            </details>
+                            <details id="controls">
+                                <summary>Controles</summary>
+                                <div id="controls-info">
+                                    <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key">◀▶</span><span class="key-desc">Moverse</span></div>
+                                    <div class="key-row"><span class="key">SPC</span><span class="key">W</span><span class="key">▲</span><span class="key-desc">Saltar (mantener: más alto; x2, en pared)</span></div>
+                                    <div class="key-row"><span class="key">S</span><span class="key">▼</span><span class="key-desc">Agacharse / caída rápida</span></div>
+                                    <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
+                                    <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
+                                    <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
+                                    <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
+                                    <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
+                                    <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
+                                    <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · gatillos dash · Start pausa</span></div>
+                                </div>
+                            </details>
+                            <details id="achievements">
+                                <summary>Logros</summary>
+                                <ul id="achievement-list"></ul>
+                            </details>
+                            <details id="ranking">
+                                <summary>Ranking</summary>
+                                <ol id="ranking-list"></ol>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="cab-glass" aria-hidden="true"></div>
+        </div>
+
+        <!-- Panel de mandos: una plataforma inclinada en 3D con joystick y botones con volumen -->
+        <div id="cab-panel" aria-hidden="true">
+            <div class="cab-deck">
+                <div id="cab-joystick" style="--x: 202px; --y: 120px">
+                    <div class="cab-joy-washer"></div>
+                    <div class="cab-stick"><div class="cab-shaft"></div><div class="cab-ball"></div></div>
+                </div>
+                <div class="cab-btn red" data-actions="jump" style="--x: 402px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>SALTO</span></div>
+                <div class="cab-btn white" data-actions="fire" style="--x: 494px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAPEL</span></div>
+                <div class="cab-btn yellow" data-actions="melee" style="--x: 586px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>GOLPE</span></div>
+                <div class="cab-btn blue" data-actions="dash" style="--x: 678px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>DASH</span></div>
+                <div class="cab-btn small" data-actions="confirm start" style="--x: 862px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>START</span></div>
+                <div class="cab-btn small" data-actions="pause" style="--x: 942px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAUSA</span></div>
+            </div>
+            <div class="cab-panel-front"></div>
+        </div>
+
+        <div id="cab-lower" aria-hidden="true">
+            <div class="cab-coin-door">
+                <div class="cab-coin"><b></b><span>INSERT COIN</span></div>
+                <div class="cab-coin"><b></b><span>1 MONEDA = 1 ROLLO</span></div>
             </div>
         </div>
     </div>
@@ -114,6 +232,7 @@
     <script src="js/story.js"></script>
     <script src="js/progress.js"></script>
     <script src="js/game.js"></script>
+    <script src="js/cabinet.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@
 }
 
 body {
-    background: #0a0a0a;
+    background: #0d0e11;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -20,21 +20,107 @@ body {
     font-family: 'Fredoka One', 'Segoe UI', sans-serif;
 }
 
-/* Tamaño lógico fijo 960x720; main.js ajusta --scale para que quepa en cualquier pantalla */
+/* Fondo: sala de recreativas desenfocada y oscurecida, para que el mueble negro se recorte sin
+   que la foto compita con él. Foto de Unsplash (licencia libre):
+   https://unsplash.com/photos/SwMvGB_5nk4 */
+body::before {
+    content: '';
+    position: fixed;
+    inset: -30px; /* el desenfoque aclara los bordes: se sacan fuera de la ventana */
+    z-index: -1;
+    background:
+        radial-gradient(ellipse at 50% 40%, rgba(13, 14, 17, 0.1) 0%, rgba(13, 14, 17, 0.6) 80%),
+        url('../assets/bg_arcade_room.jpg') center / cover no-repeat;
+    filter: blur(6px) brightness(0.8) saturate(1.15);
+}
+
+/* Pantalla del juego: tamaño lógico fijo 960x720. Lo escala el mueble (#cabinet), ver main.js */
 #game-container {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    position: relative;
     width: 960px;
     height: 720px;
-    border: 3px solid #3a3a3a;
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow:
-        0 0 0 1px #1a1a1a,
-        0 0 30px rgba(0, 0, 0, 0.9),
-        0 0 60px rgba(255, 107, 53, 0.1);
+    background: #000;
+}
+
+/* Pantalla de arranque (ver main.js): cara de Freddy y "CARGANDO..." durante 2 s */
+#boot-screen {
+    --boot-time: 2s;
+    position: absolute;
+    inset: 0;
+    z-index: 40; /* por encima del HUD y de los menús */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    background:
+        radial-gradient(circle at 50% 40%, rgba(255, 140, 66, 0.22) 0, transparent 150px),
+        radial-gradient(ellipse at 50% 42%, #1a1a1a 0%, #0a0a0a 55%, #000 100%);
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    transition: opacity 0.7s ease;
+}
+
+#boot-screen.done {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.boot-face {
+    width: 200px;
+    height: auto;
+    /* el recorte acaba en la camiseta: se difumina por abajo */
+    -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
+    animation: bootBob 1.2s ease-in-out infinite;
+}
+
+@keyframes bootBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.boot-text {
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: #ffcc00;
+    text-shadow: 0 0 12px rgba(255, 204, 0, 0.5);
+}
+
+.boot-dots i {
+    font-style: normal;
+    animation: 1.2s steps(1) infinite;
+}
+
+/* Los puntos aparecen uno tras otro y se quedan: "." ".." "..." */
+.boot-dots i:nth-child(1) { animation-name: bootDot1; }
+.boot-dots i:nth-child(2) { animation-name: bootDot2; }
+.boot-dots i:nth-child(3) { animation-name: bootDot3; }
+
+@keyframes bootDot1 { 0% { opacity: 0; } 25% { opacity: 1; } }
+@keyframes bootDot2 { 0% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes bootDot3 { 0% { opacity: 0; } 75% { opacity: 1; } }
+
+/* Barra de progreso: se llena en el tiempo que dura la pantalla */
+.boot-bar {
+    width: 320px;
+    height: 16px;
+    padding: 3px;
+    border: 2px solid #ffcc00;
+}
+
+.boot-bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #ff7a1a, #ffcc00);
+    animation: bootFill var(--boot-time) linear forwards;
+}
+
+@keyframes bootFill {
+    to { width: 100%; }
 }
 
 #gameCanvas {
@@ -476,4 +562,419 @@ body {
 
 #toast.show {
     transform: translate(-50%, 0);
+}
+
+/* ==========================================================================
+   Mueble de recreativa (negro, marquesina "ARCADE" con franjas retro)
+   Medidas lógicas: 1084 de ancho (1100 con el vuelo del panel);
+   tabla superior + marquesina + pantalla + mandos = 1130 de alto.
+   main.js escala todo el mueble con --scale; la parte baja sigue fuera de la ventana.
+   Perspectiva con el ojo en el centro de la pantalla: el panel de mandos se inclina
+   hacia el fondo; los laterales (#cab-frame) se ven de frente.
+   ========================================================================== */
+:root {
+    --cab-yellow: #ffcc00;
+    --cab-black: #0e0e0f;
+    --cab-blue: #2f8cff;
+    --cab-red: #e3261b;
+    --cab-orange: #ff7a1a;
+    --cab-side-w: 40px;    /* grosor de cada lateral a la altura de la marquesina */
+    --cab-tilt: 58deg;     /* inclinación del panel de mandos */
+}
+
+#cabinet {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 1084px;
+    height: 1600px;
+    padding: 48px var(--cab-side-w) 0; /* arriba, la tabla superior (#cab-frame) */
+    transform: translateX(-50%) scale(var(--scale, 1));
+    transform-origin: top center;
+    perspective: 2200px;
+    perspective-origin: 50% 584px; /* centro de la pantalla */
+}
+
+/* --- Laterales ---------------------------------------------------------------- */
+#cab-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3; /* por delante de marquesina y bisel: son el borde del mueble */
+    pointer-events: none;
+}
+
+/* Moldura en T del canto (mate): negro, gris oscuro y un filo de luz muy tenue */
+.cab-molding {
+    fill: none;
+    stroke-linejoin: round;
+}
+
+.cab-molding.m1 { stroke: #030304; stroke-width: 8; }
+.cab-molding.m2 { stroke: #1d1d21; stroke-width: 6; }
+.cab-molding.m3 { stroke: #26262a; stroke-width: 3; }
+.cab-molding.m4 { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1; transform: translateX(-0.5px); }
+
+/* --- Marquesina: letrero retroiluminado entre los laterales -------------------- */
+#cab-marquee {
+    position: relative;
+    z-index: 2;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse at 55% 40%, rgba(255, 255, 255, 0.08), transparent 70%),
+        linear-gradient(180deg, #161618 0%, #050505 100%);
+    box-shadow: inset 0 -3px 0 #000;
+}
+
+/* Reflejo del metacrilato */
+#cab-marquee::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(170deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 35%, transparent 36%);
+}
+
+/* Franjas diagonales que suben desde la esquina inferior izquierda */
+.cab-stripes {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+}
+
+.cab-stripes i {
+    position: absolute;
+    top: -40px;
+    bottom: -40px;
+    width: 36px;
+    transform: skewX(-35deg);
+}
+
+.cab-stripes i:nth-child(1) { left: 10px; background: var(--cab-red); }
+.cab-stripes i:nth-child(2) { left: 56px; background: var(--cab-orange); }
+.cab-stripes i:nth-child(3) { left: 102px; background: var(--cab-yellow); }
+.cab-stripes i:nth-child(4) { left: 148px; background: var(--cab-blue); }
+
+.cab-marquee-text {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    color: #fff;
+    font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 900;
+}
+
+.cab-marquee-text small {
+    font-size: 16px;
+    letter-spacing: 1px;
+}
+
+.cab-marquee-text strong {
+    margin: 2px 0 0 -4px;
+    font-size: 86px;
+    letter-spacing: 2px;
+    transform: skewX(-6deg);
+    text-shadow: 0 0 16px rgba(255, 255, 255, 0.25);
+}
+
+.cab-marquee-text em {
+    align-self: flex-end;
+    margin-top: -4px;
+    font-size: 22px;
+    font-style: italic;
+    letter-spacing: 1px;
+    color: var(--cab-blue);
+}
+
+.cab-marquee-text b {
+    align-self: flex-end;
+    margin-top: 4px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    font-weight: normal;
+    letter-spacing: 1px;
+    color: #ddd;
+}
+
+/* --- Bisel y cristal ------------------------------------------------------------ */
+#cab-bezel {
+    position: relative;
+    z-index: 1; /* el cristal (z-index 30) queda dentro del bisel, por debajo del panel de mandos */
+    padding: 26px 22px 30px;
+    background: linear-gradient(180deg, #0a0a0b, #141416 60%, #0b0b0c);
+    box-shadow: inset 0 22px 26px rgba(0, 0, 0, 0.85), inset 0 0 0 2px #000;
+}
+
+/* Reflejo y líneas de barrido muy suaves, sin bloquear los clics */
+#cab-glass {
+    position: absolute;
+    inset: 26px 22px 30px;
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 30;
+    background:
+        linear-gradient(125deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 40%),
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.07) 0 1px, transparent 1px 3px);
+    box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.55), 0 0 0 4px #1c1c1f, 0 0 0 8px #34343a, 0 0 0 9px #000;
+}
+
+/* --- Panel de mandos en 3D ---------------------------------------------------- */
+#cab-panel {
+    position: relative;
+    z-index: 2;
+    height: 156px;
+    margin: 0 calc(var(--cab-side-w) * -1 - 8px);
+    z-index: 4; /* por delante de los laterales */
+    transform-style: preserve-3d;
+}
+
+/* Plataforma de 1100x240 inclinada sobre su arista delantera, con marco rojo y amarillo */
+.cab-deck {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 30px;
+    height: 240px;
+    transform-origin: 50% 100%;
+    transform: rotateX(var(--cab-tilt));
+    transform-style: preserve-3d;
+    border-radius: 8px 8px 0 0;
+    background: linear-gradient(180deg, #1a1a1c, #0c0c0d);
+    box-shadow:
+        inset 0 0 0 14px #0a0a0a,
+        inset 0 0 0 17px #a8241b,
+        inset 0 0 0 21px #0a0a0a,
+        inset 0 0 0 23px #c99a12;
+    font-family: 'Press Start 2P', monospace;
+}
+
+/* Franjas de colores en la esquina delantera izquierda, como en el marco de la marquesina */
+.cab-deck::before {
+    content: '';
+    position: absolute;
+    left: 44px;
+    bottom: 32px;
+    width: 90px;
+    height: 8px;
+    opacity: 0.85;
+    background: linear-gradient(90deg, var(--cab-red) 0 25%, var(--cab-orange) 25% 50%, var(--cab-yellow) 50% 75%, var(--cab-blue) 75%);
+    transform: skewX(-32deg);
+}
+
+/* Canto delantero del panel con moldura en T amarilla */
+.cab-panel-front {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 30px;
+    background:
+        linear-gradient(#a8241b, #a8241b) 0 12px / 100% 2px no-repeat,
+        linear-gradient(180deg, #1a1a1a, #050505);
+    border-top: 3px solid #2c2c2f;
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 16px 24px rgba(0, 0, 0, 0.75);
+}
+
+/* Joystick: arandela en la plataforma y palo de pie con bola. cabinet.js fija --jx (-1..1) y --jy (0..1) */
+#cab-joystick {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    transform-style: preserve-3d;
+}
+
+.cab-joy-washer {
+    position: absolute;
+    left: -34px;
+    top: -34px;
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #050505 0 9px, #2b2b2b 10px, #111 60%, #000 100%);
+    box-shadow: 0 0 0 3px #000, 0 8px 10px rgba(0, 0, 0, 0.6);
+}
+
+.cab-stick {
+    position: absolute;
+    left: -5px;
+    top: -80px;
+    width: 10px;
+    height: 80px;
+    transform-origin: 50% 100%;
+    transform: rotateY(calc(var(--jx, 0) * 20deg)) rotateX(calc(var(--jy, 0) * -20deg)) rotateX(-90deg);
+    transform-style: preserve-3d;
+    transition: transform 0.07s ease-out;
+}
+
+.cab-shaft {
+    position: absolute;
+    inset: 0;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #6d6d6d, #f4f4f4 40%, #9a9a9a 70%, #555);
+}
+
+/* La bola se gira de vuelta hacia el jugador para verse siempre redonda */
+.cab-ball {
+    position: absolute;
+    left: -21px;
+    top: -36px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    transform: rotateX(calc(90deg - var(--cab-tilt)));
+    background: radial-gradient(circle at 36% 30%, #fff 0 4%, #ff8a80 12%, var(--cab-red) 45%, #8a0f08 85%, #4a0603 100%);
+    box-shadow: inset -4px -6px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Botones: aro fijo en la plataforma y pulsador hecho de capas apiladas (cilindro) */
+.cab-btn {
+    --btn: var(--cab-red);
+    --btn-dark: #8a0f08;
+    --size: 54px;
+    --press: 0px;
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    transform-style: preserve-3d;
+}
+
+.cab-btn.white { --btn: #f4f4f4; --btn-dark: #9a9a9a; }
+.cab-btn.yellow { --btn: var(--cab-yellow); --btn-dark: #a07800; }
+.cab-btn.blue { --btn: #2d6cff; --btn-dark: #10308a; }
+.cab-btn.small { --btn: #e8e8e8; --btn-dark: #8a8a8a; --size: 34px; }
+
+/* Aro negro en la plataforma */
+.cab-btn::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--size) / -2 - 8px);
+    top: calc(var(--size) / -2 - 8px);
+    width: calc(var(--size) + 16px);
+    height: calc(var(--size) + 16px);
+    border-radius: 50%;
+    background: radial-gradient(circle, #000 0 55%, #2e2e2e 62%, #0b0b0b 100%);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.6);
+}
+
+.cab-btn b, .cab-btn i {
+    position: absolute;
+    left: calc(var(--size) / -2);
+    top: calc(var(--size) / -2);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: var(--btn-dark);
+    transform: translateZ(calc(var(--z) - var(--press)));
+    transition: transform 0.05s;
+}
+
+.cab-btn b:nth-child(1) { --z: 2px; }
+.cab-btn b:nth-child(2) { --z: 4px; }
+.cab-btn b:nth-child(3) { --z: 6px; }
+.cab-btn b:nth-child(4) { --z: 8px; }
+.cab-btn b:nth-child(5) { --z: 10px; }
+
+/* Cara superior, ligeramente cóncava */
+.cab-btn i {
+    --z: 12px;
+    background: radial-gradient(circle at 50% 60%, var(--btn-dark) 0%, var(--btn) 55%, color-mix(in srgb, var(--btn) 60%, #fff) 100%);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--btn) 70%, #fff);
+}
+
+.cab-btn span {
+    position: absolute;
+    left: -60px;
+    top: calc(var(--size) / 2 + 14px);
+    width: 120px;
+    text-align: center;
+    color: #e8e8e8;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-shadow: 0 1px 0 #000;
+}
+
+/* Pulsado: el pulsador baja y se ilumina */
+.cab-btn.pressed {
+    --press: 8px;
+}
+
+.cab-btn.pressed i {
+    background: radial-gradient(circle at 50% 60%, var(--btn) 0%, color-mix(in srgb, var(--btn) 50%, #fff) 100%);
+    box-shadow: inset 0 0 0 2px #fff, 0 0 22px var(--btn);
+}
+
+/* --- Parte baja: puerta de monedas ------------------------------------------- */
+#cab-lower {
+    position: relative;
+    height: 560px;
+    margin-top: -6px;
+    padding: 46px 60px 0;
+    background: linear-gradient(180deg, #161618, var(--cab-black) 30%);
+    box-shadow: inset 0 18px 24px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+}
+
+.cab-coin-door {
+    display: flex;
+    gap: 40px;
+    padding: 22px 34px;
+    background: linear-gradient(180deg, #3a3a3a, #1c1c1c);
+    border: 3px solid #555;
+    border-radius: 6px;
+    font-family: 'Press Start 2P', monospace;
+}
+
+.cab-coin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #ff5a4f;
+    font-size: 9px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.cab-coin b {
+    width: 54px;
+    height: 70px;
+    border-radius: 4px;
+    background:
+        linear-gradient(90deg, transparent 45%, #000 45% 55%, transparent 55%) center / 100% 60% no-repeat,
+        radial-gradient(circle, #ff3b30 0%, #9b0d06 80%);
+    box-shadow: 0 0 16px rgba(255, 59, 48, 0.7), inset 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+/* En pantallas táctiles no hay mueble: solo la pantalla, centrada como antes */
+@media (pointer: coarse) {
+    #cabinet {
+        top: 50%;
+        width: 960px;
+        height: 720px;
+        padding: 0;
+        transform: translate(-50%, -50%) scale(var(--scale, 1));
+        transform-origin: center;
+        perspective: none;
+    }
+
+    #cab-frame, #cab-marquee, #cab-panel, #cab-lower, #cab-glass {
+        display: none;
+    }
+
+    #cab-bezel {
+        padding: 0;
+        background: none;
+        box-shadow: none;
+    }
 }
