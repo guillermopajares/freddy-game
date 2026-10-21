@@ -705,8 +705,13 @@ class Game {
         this.spawnText(cx, enemy.y, this.combo > 1 ? `+${points} x${this.combo}` : `+${points}`);
         this.triggerScreenShake(enemy.isBoss ? 16 : 5);
         // Los bugs a veces sueltan papel; el 404 devuelve lo que robó
-        if (!enemy.isBoss && (enemy.carrying || Math.random() < 0.35)) {
-            this.collectibles.push(new Collectible(cx - 14, enemy.y + enemy.height - 34, 'paper'));
+        const dropY = enemy.y + enemy.height - 34;
+        const paper = !enemy.isBoss && (enemy.carrying || Math.random() < 0.35);
+        if (paper) this.collectibles.push(new Collectible(cx - 14, dropY, 'paper'));
+        if (Math.random() < enemy.heartDropChance) {
+            const heart = new Collectible(cx - 14 + (paper ? 30 : 0), dropY, 'heart');
+            heart.dropped = true; // no cuenta para las estrellas del nivel
+            this.collectibles.push(heart);
         }
     }
 
@@ -804,7 +809,7 @@ class Game {
             if (c.collected || !Collision.aabb(player.getBounds(), c.getBounds())) return;
             c.collected = true;
             player.score += c.value;
-            if (STAR_TYPES.has(c.type)) this.collectedCount++;
+            if (STAR_TYPES.has(c.type) && !c.dropped) this.collectedCount++;
 
             if (c.type === 'heart' && player.lives < 5) player.lives++;
             if (c.type === 'paper') {

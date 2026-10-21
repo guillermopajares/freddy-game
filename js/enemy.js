@@ -35,6 +35,11 @@ class Enemy {
         this.mirror = true; // false = de frente, no se voltea (el texto 404 saldría al revés)
     }
 
+    // Probabilidad de soltar un corazón al morir: élites y jefes siempre.
+    get heartDropChance() {
+        return this.isBoss || this.elite ? 1 : 0.15;
+    }
+
     setState(state) {
         if (this.state !== state) {
             this.state = state;
@@ -639,3 +644,5 @@ class BossGlitch extends Error404 {
 }
 
 const ENEMY_TYPES = { CodeBug, Error404, Boss404, BossSpider, BossBug, BossGlitch };
+
+if (typeof module !== 'undefined') module.exports = { Enemy, ENEMY_TYPES };
