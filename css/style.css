@@ -203,6 +203,9 @@ body::before {
     max-height: 700px;
     overflow-y: auto;
     padding: 24px 40px;
+    /* Al abrir Ajustes/Logros sale scroll: barra fina a juego (la de Windows por defecto desentona) */
+    scrollbar-width: thin;
+    scrollbar-color: #ff6b35 transparent;
 }
 
 #overlay.hidden {
@@ -956,25 +959,49 @@ body::before {
     box-shadow: 0 0 16px rgba(255, 59, 48, 0.7), inset 0 0 6px rgba(0, 0, 0, 0.8);
 }
 
-/* En pantallas táctiles no hay mueble: solo la pantalla, centrada como antes */
+/* Modo del mueble: main.js pone data-cabinet en <html> según el ajuste y el tamaño de la ventana
+   (en táctil, siempre "off"). */
+
+/* Compacto: solo la tabla superior y la pantalla; en ventanas bajas la pantalla no encoge tanto */
+[data-cabinet="compact"] #cab-marquee,
+[data-cabinet="compact"] #cab-panel,
+[data-cabinet="compact"] #cab-lower {
+    display: none;
+}
+
+/* Sin mueble: solo la pantalla, centrada */
+[data-cabinet="off"] #cabinet {
+    top: 50%;
+    width: 960px;
+    height: 720px;
+    padding: 0;
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    transform-origin: center;
+    perspective: none;
+}
+
+[data-cabinet="off"] #cab-frame,
+[data-cabinet="off"] #cab-marquee,
+[data-cabinet="off"] #cab-panel,
+[data-cabinet="off"] #cab-lower,
+[data-cabinet="off"] #cab-glass {
+    display: none;
+}
+
+[data-cabinet="off"] #cab-bezel {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+}
+
+/* Sin efecto de pantalla antigua: fuera reflejo, líneas y viñeta; se queda el marco del cristal */
+.no-crt #cab-glass {
+    background: none;
+    box-shadow: 0 0 0 4px #1c1c1f, 0 0 0 8px #34343a, 0 0 0 9px #000;
+}
+
 @media (pointer: coarse) {
-    #cabinet {
-        top: 50%;
-        width: 960px;
-        height: 720px;
-        padding: 0;
-        transform: translate(-50%, -50%) scale(var(--scale, 1));
-        transform-origin: center;
-        perspective: none;
-    }
-
-    #cab-frame, #cab-marquee, #cab-panel, #cab-lower, #cab-glass {
-        display: none;
-    }
-
-    #cab-bezel {
-        padding: 0;
-        background: none;
-        box-shadow: none;
+    .cabinet-only {
+        display: none !important;
     }
 }

@@ -25,7 +25,10 @@ const ACHIEVEMENTS = {
     bossRival: 'Sin rencores: derrota a un compañero rival',
 };
 
-const DEFAULT_SETTINGS = { volume: 70, shake: true, flash: true, difficulty: 'normal', character: 'freddy' };
+// cabinet: 'auto' | 'full' | 'compact' | 'off' (mueble de recreativa); crt: líneas y reflejo del cristal
+const DEFAULT_SETTINGS = {
+    volume: 70, shake: true, flash: true, difficulty: 'normal', character: 'freddy', cabinet: 'auto', crt: true,
+};
 
 class Progress {
     constructor(storage) {
