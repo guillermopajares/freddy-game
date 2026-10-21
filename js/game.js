@@ -102,10 +102,12 @@ class Game {
             const total = Object.keys(sources).length;
             let loaded = 0;
             const done = () => this.drawLoading(++loaded / total);
-            // Las hojas nuevas van apretadas: se limpian trozos de frames vecinos (keepLargest)
+            // Las hojas nuevas van apretadas (keepLargest quita trozos de frames vecinos) y no tienen verdes
+            // propios: el que queda entre brazo y cuerpo es fondo (seeThrough)
             this.sheets = {};
             for (const [id, c] of Object.entries(CHARACTERS)) {
-                this.sheets[id] = new SpriteSheet(sources[id], c.frames, { keepLargest: id !== 'freddy' });
+                const extra = id !== 'freddy';
+                this.sheets[id] = new SpriteSheet(sources[id], c.frames, { keepLargest: extra, seeThrough: extra });
             }
             this.freddySheet = this.sheets.freddy;
             // El coche no tiene verdes propios: el que asoma por el parabrisas y las ruedas es fondo
@@ -317,11 +319,14 @@ class Game {
     newGame(levelIndex) {
         this.state = 'select';
         this.pendingLevel = { index: levelIndex };
+        // Con diez personajes la habilidad no cabe en la tarjeta: se muestra la del seleccionado
+        const chosen = CHARACTERS[this.character];
         this.showOverlay({
             title: 'ELIGE PERSONAJE',
-            text: IS_TOUCH ? 'Los demás serán tus rivales' : 'Los demás serán tus rivales · ◀ ▶ y ENTER para elegir',
+            subtitle: 'LOS DEMÁS SERÁN TUS RIVALES',
+            text: `${chosen.name}: ${chosen.desc}` + (IS_TOUCH ? '' : ' · ◀ ▶ y ENTER para elegir'),
             buttons: Object.entries(CHARACTERS).map(([id, c]) => ({
-                label: `${c.name}: ${c.desc}`,
+                label: c.name,
                 img: this.portraits[id],
                 secondary: id !== this.character,
                 action: () => this.selectCharacter(id),

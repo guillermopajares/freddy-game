@@ -24,9 +24,9 @@ Scripts clásicos cargados en orden desde `index.html`; todo son globales (`clas
 | Fichero | Qué hace |
 |---|---|
 | `js/asset-files.js` | Rutas de imágenes (`ASSET_FILES`) |
-| `js/assets.js` | **20 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
+| `js/assets.js` | **~50 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
 | `js/sprite.js` | Coordenadas de frames de las hojas, chroma key, `SpriteSheet` |
-| `js/characters.js` | Frames de Dani, Fer, Guille y el coche de Dani; `CHARACTERS` (escala y stats de cada uno) |
+| `js/characters.js` | Frames de los personajes elegibles y del coche de Dani; `CHARACTERS` (escala y stats de cada uno) |
 | `js/input.js` | Teclado + mando + botones táctiles → acciones (`BINDINGS`: `jump`, `fire`, `melee`, `dash`...) |
 | `js/sound.js` | Efectos y música sintetizados con Web Audio (sin ficheros de audio) |
 | `js/collision.js` | AABB y resolución contra plataformas |
@@ -64,7 +64,7 @@ Detalles clave:
 
 ## Trampas conocidas (aprendidas a base de errores)
 
-- **`js/assets.js` pesa 20 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
+- **`js/assets.js` pesa ~50 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
   Para cambiar imágenes: editar `assets/` y `js/asset-files.js`, luego `node tools/build-assets.js`.
 - **`file://` no permite `getImageData` sobre imágenes sueltas** (canvas "tainted"); por eso existe la versión
   embebida. Por http se cargan los ficheros. Probar siempre por http.
@@ -92,7 +92,11 @@ Detalles clave:
   (`speed`, `jumpForce`, `punch`, `reach`, `car`). Los no elegidos salen como `BossRival` en el nivel 1 y,
   con `rivalChance`, en lugar del minijefe de los niveles 2 y 4. `BossRival` no mira bordes: solo en arenas con suelo entero.
 - **`assets/guille.jpg` viene de `art/guille.jpeg`**, que traía un fondo de cuadros (falsa transparencia) en vez de
-  verde: se convirtió a verde croma una vez. Las hojas nuevas usan `keepLargest` para borrar trozos de frames vecinos.
+  verde: se convirtió a verde croma una vez. Las hojas de personajes (todas menos Freddy) usan `keepLargest` para
+  borrar trozos de frames vecinos y `seeThrough` para el verde encerrado entre brazo y cuerpo.
+- **Nuevo personaje:** hoja en `art/` → copiarla a `assets/<id>.jpg`, entrada en `ASSET_FILES`, frames y entrada en
+  `CHARACTERS` (`js/characters.js`), `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
+  el salto de cada personaje que llega a todo. La selección muestra cinco por fila (`button.character`).
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
 
 ## Depurar en el navegador

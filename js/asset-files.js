@@ -13,6 +13,12 @@ const ASSET_FILES = {
     dani_car: 'assets/dani_car.jpg',
     fer: 'assets/fer.jpg',
     guille: 'assets/guille.jpg',
+    charly: 'assets/charly.jpg',
+    david: 'assets/david.jpg',
+    juancarlos: 'assets/juancarlos.jpg',
+    sergio: 'assets/sergio.jpg',
+    rober: 'assets/rober.jpg',
+    alvaro: 'assets/alvaro.jpg',
 };
 
 if (typeof module !== 'undefined') module.exports = ASSET_FILES;
