@@ -116,9 +116,9 @@ class Player {
         let crouch = down && this.onGround && !stunned;
         const dh = this.baseHeight - this.crouchHeight;
         if (!crouch && this.crouching) {
-            // No levantarse si hay una plataforma encima de la cabeza
+            // No levantarse si hay suelo sólido encima de la cabeza
             const standing = { x: this.x, y: this.y - dh, width: this.width, height: this.baseHeight };
-            if (platforms.some(p => Collision.aabb(standing, p))) crouch = true;
+            if (platforms.some(p => p.ground && Collision.aabb(standing, p))) crouch = true;
         }
         if (crouch !== this.crouching) {
             this.y += crouch ? dh : -dh;
@@ -140,11 +140,10 @@ class Player {
             this.velocityX *= 0.92;
         } else if (this.wallJumpLockout > 0) {
             this.wallJumpLockout--;
-        } else if (crouch) {
-            this.velocityX = 0;
         } else {
             const dir = (right ? 1 : 0) - (left ? 1 : 0);
-            const speed = this.charge > 0 ? this.speed * 0.6 : this.speed;
+            let speed = this.charge > 0 ? this.speed * 0.6 : this.speed;
+            if (crouch) speed *= 0.5; // andar agachado
             if (dir) {
                 this.velocityX = dir * speed;
                 this.facing = dir;
@@ -343,3 +342,5 @@ class Player {
         return { x: this.x, y: this.y, width: this.width, height: this.height };
     }
 }
+
+if (typeof module !== 'undefined') module.exports = Player;

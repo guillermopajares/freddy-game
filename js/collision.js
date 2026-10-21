@@ -10,6 +10,8 @@ class Collision {
 
     // Resuelve solapes con plataformas. Deja en entity.ground la plataforma pisada
     // (para que las plataformas móviles arrastren a quien está encima).
+    // Las plataformas flotantes son de un solo sentido: se atraviesan desde abajo
+    // y por los lados, y solo frenan a quien cae sobre ellas. El suelo es sólido.
     static checkPlatformCollisions(entity, platforms) {
         entity.onGround = false;
         entity.ground = null;
@@ -19,6 +21,19 @@ class Collision {
 
         platforms.forEach(platform => {
             if (!this.aabb(entity, platform)) return;
+
+            if (!platform.ground) {
+                const prevBottom = entity.y + entity.height - entity.velocityY;
+                if (entity.velocityY < 0 || prevBottom > platform.y + 1) return;
+                entity.y = platform.y - entity.height;
+                entity.onGround = true;
+                entity.ground = platform;
+                entity.velocityY = 0;
+                if (entity.jumpsLeft !== undefined) {
+                    entity.jumpsLeft = entity.maxJumps;
+                }
+                return;
+            }
 
             const overlapX = Math.min(
                 entity.x + entity.width - platform.x,
