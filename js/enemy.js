@@ -26,6 +26,8 @@ class Enemy {
         this.state = 'walk';
         this.stateTime = 0;
         this.cooldown = 60;
+        this.rest = 1; // >1: el cooldown baja más despacio (jefes en Fácil, ver DIFFICULTY.bossRest)
+        this.restAcc = 0;
         this.hitTimer = 0;
         this.stun = 0;
         this.dying = false;
@@ -81,6 +83,14 @@ class Enemy {
             this.velocityX = 0;
             if (!this.gravity) this.velocityY = 0;
         } else {
+            // Devuelve parte de lo que think() descuenta: el cooldown avanza a ritmo 1/rest
+            if (this.rest > 1 && this.cooldown > 0) {
+                this.restAcc += 1 - 1 / this.rest;
+                if (this.restAcc >= 1) {
+                    this.restAcc--;
+                    this.cooldown++;
+                }
+            }
             this.think(player, level, game);
         }
 

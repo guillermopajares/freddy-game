@@ -506,6 +506,7 @@ class Game {
         const d = this.progress.difficulty;
         const enemy = new ENEMY_TYPES[type](x, y, { ...opts, elite: opts.elite || (d.elite && !type.startsWith('Boss')) });
         enemy.health = enemy.maxHealth = Math.max(1, Math.round(enemy.maxHealth * (enemy.isBoss ? d.bossHealth : d.enemyHealth)));
+        if (enemy.isBoss) enemy.rest = d.bossRest || 1;
         return enemy;
     }
 
@@ -856,6 +857,16 @@ class Game {
                 Sound.play('stomp');
                 if (++this.progress.data.stats.stomps >= 25) this.unlockAchievement('stomper');
                 this.hitEnemy(enemy, 1, '#ffd700');
+                return;
+            }
+            // Un jefe que solo camina no hace daño al tocarlo: para pegarle hay que estar pegado a él
+            // y, como avanza hacia Freddy, lo volvía a tumbar cada vez que acababa la invulnerabilidad.
+            // Su cuerpo aparta a Freddy: si se quedara dentro, el siguiente ataque le daría sin aviso.
+            if (enemy.isBoss && enemy.state === 'walk') {
+                if (player.dashTimer === 0) {
+                    const fromLeft = player.x + player.width / 2 < enemy.x + enemy.width / 2;
+                    player.x = fromLeft ? enemy.x - player.width : enemy.x + enemy.width;
+                }
                 return;
             }
             this.hurtPlayer(enemy.x + enemy.width / 2, enemy.heavy);

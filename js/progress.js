@@ -3,8 +3,9 @@
 const PROGRESS_KEY = 'freddyProgress';
 const RANKING_SIZE = 10;
 
+// bossRest: los jefes descansan esa proporción más entre ataques (1.5 = 50 % más)
 const DIFFICULTY = {
-    easy: { label: 'Fácil', lives: 5, enemyHealth: 0.6, bossHealth: 0.7, elite: false },
+    easy: { label: 'Fácil', lives: 5, enemyHealth: 0.6, bossHealth: 0.7, elite: false, bossRest: 1.5 },
     normal: { label: 'Normal', lives: 3, enemyHealth: 1, bossHealth: 1, elite: false },
     hard: { label: 'Difícil', lives: 3, enemyHealth: 1, bossHealth: 1.3, elite: true },
 };
