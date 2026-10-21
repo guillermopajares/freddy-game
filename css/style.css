@@ -203,6 +203,12 @@ body::before {
     max-height: 700px;
     overflow-y: auto;
     padding: 24px 40px;
+    /* Se desplaza con rueda/táctil/teclado, pero sin barra: la del sistema rompe la estética */
+    scrollbar-width: none;
+}
+
+#overlay-content::-webkit-scrollbar {
+    display: none;
 }
 
 #overlay.hidden {
