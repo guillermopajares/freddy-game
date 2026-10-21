@@ -10,6 +10,7 @@ const TOP_BACK = 7;        // la cara superior sube 7 px sobre p.y y baja 6:
 const TOP_FRONT = 6;       // los pies (en p.y) quedan en mitad de la superficie
 const BG_SHIFT_X = 18;     // desplazamiento máximo del fondo con el parallax
 const BG_SHIFT_Y = 12;
+const CAM_SHIFT_X = 190;    // recorrido extra del fondo de punta a punta del nivel (scroll)
 const FG_SHIFT_X = 34;     // el primer plano se mueve más y en sentido contrario
 
 const MATERIALS = {
@@ -919,6 +920,8 @@ class Scenery {
         if (!this.vignette) this.vignette = buildVignette();
         this.px = 0;
         this.py = 0;
+        this.camX = 0;
+        this.camT = 0; // 0 = cámara al principio del nivel, 1 = al final
         this.initMotes();
     }
 
@@ -942,6 +945,9 @@ class Scenery {
     // camX: el parallax depende de la posición de Freddy en pantalla, no en el mundo.
     update(player, camX = 0) {
         this.time++;
+        const camDelta = camX - this.camX;
+        this.camX = camX;
+        this.camT = this.level.width > VIEW_W ? camX / (this.level.width - VIEW_W) : 0;
         if (player && !player.dead) {
             const tx = clamp((player.x - camX + player.width / 2 - VIEW_W / 2) / (VIEW_W / 2), -1, 1);
             const ty = clamp((player.y + player.height / 2 - VIEW_H / 2) / (VIEW_H / 2), -1, 1);
@@ -952,7 +958,7 @@ class Scenery {
         const cfg = this.theme.motes;
         this.motes.forEach(m => {
             m.phase += 0.02 * m.speed;
-            m.x += (cfg.vx + Math.sin(m.phase) * 0.15) * m.z * m.speed;
+            m.x += (cfg.vx + Math.sin(m.phase) * 0.15) * m.z * m.speed - camDelta * m.z * 0.6;
             m.y += (cfg.vy + Math.cos(m.phase * 0.7) * 0.08) * m.z * m.speed;
             if (m.x < -30) m.x += VIEW_W + 60;
             if (m.x > VIEW_W + 30) m.x -= VIEW_W + 60;
@@ -968,7 +974,10 @@ class Scenery {
         if (bg) {
             // Algo más grande que la pantalla para que el parallax no deje huecos.
             // Algunos fondos traen ~28 px de margen blanco a la izquierda.
-            ctx.drawImage(bg, 30, 0, bg.width - 30, bg.height, -34 + bx, -24 + by, 1028, 768);
+            // Con scroll, el fondo es más ancho aún y recorre CAM_SHIFT_X a lo largo del nivel.
+            const w = 1028 + CAM_SHIFT_X;
+            const h = 768 * w / 1028;
+            ctx.drawImage(bg, 30, 0, bg.width - 30, bg.height, -34 + bx - this.camT * CAM_SHIFT_X, -24 + by - (h - 768) / 2, w, h);
         } else {
             const gradient = ctx.createLinearGradient(0, 0, 0, VIEW_H);
             gradient.addColorStop(0, '#87ceeb');
@@ -986,7 +995,7 @@ class Scenery {
 
         // Bancos de bruma a media distancia, entre el fondo y el plano de juego
         const hw = this.haze.width;
-        const hx = -((this.time * 0.15) % hw) + bx * 0.5 - 40;
+        const hx = -((this.time * 0.15 + this.camX * 0.3) % hw) + bx * 0.5 - 40;
         ctx.globalAlpha = 0.8;
         ctx.drawImage(this.haze, hx, by * 0.5);
         ctx.drawImage(this.haze, hx + hw, by * 0.5);

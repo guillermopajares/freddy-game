@@ -104,7 +104,10 @@ const Sound = {
                 this.tone(116, 0.9, { type: 'sawtooth', slide: -50, volume: 0.12 });
                 break;
             case 'bossPhase': this.noise(0.5, 0.2); this.tone(80, 0.6, { type: 'sawtooth', slide: 200, volume: 0.15 }); break;
-            case 'portal': this.tone(200, 0.6, { type: 'sine', slide: 900, volume: 0.15 }); break;
+            case 'flush': // cisterna al cruzar la puerta
+                this.noise(1.1, 0.18);
+                this.tone(420, 0.9, { type: 'sine', slide: -320, volume: 0.1 });
+                break;
             case 'gameOver':
                 [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.25, { type: 'triangle', delay: i * 0.22 }));
                 break;
