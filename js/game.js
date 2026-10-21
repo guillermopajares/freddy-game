@@ -78,19 +78,21 @@ class Game {
         this.panels = $('panels');
         this.nameEntry = $('name-entry');
         this.nameInput = $('name-input');
+        this.nameSubmit = this.nameEntry.querySelector('button');
+        this.nameStatus = $('name-status');
         this.toast = $('toast');
         this.toastQueue = [];
+        this.onlineRanking = null; // última lista de la API; null = sin cargar o sin conexión
+        this.rankingLoading = false;
+        this.sending = false;
+        this.savedLocally = false; // la copia local se guarda una vez aunque se reintente el envío
 
         this.bindSettings();
         this.nameEntry.addEventListener('submit', (e) => {
             e.preventDefault();
-            this.progress.addToRanking(this.nameInput.value, this.player.score, this.progress.settings.difficulty);
-            this.nameEntry.hidden = true;
-            this.nameInput.blur();
-            this.renderRanking();
-            document.getElementById('ranking').open = true;
+            this.sendScore();
         });
-        // Esc suelta el campo del nombre para seguir navegando sin guardar
+        // Esc suelta el campo del nombre para seguir navegando sin enviar
         this.nameInput.addEventListener('keydown', (e) => {
             if (e.code === 'Escape') this.nameInput.blur();
         });
@@ -230,16 +232,37 @@ class Game {
         }));
     }
 
+    // Ranking online; si la API no contesta, el de este navegador.
     renderRanking() {
-        const list = document.getElementById('ranking-list');
-        const ranking = this.progress.data.ranking;
-        list.replaceChildren(...(ranking.length ? ranking : [null]).map(entry => {
+        const offline = !this.onlineRanking && !this.rankingLoading;
+        let lines;
+        if (this.onlineRanking) {
+            lines = this.onlineRanking.map(e => `${e.username} — ${e.points}`);
+        } else if (this.rankingLoading) {
+            lines = ['Cargando…'];
+        } else {
+            lines = this.progress.data.ranking.map(e =>
+                `${e.name} — ${e.score} (${(DIFFICULTY[e.difficulty] || DIFFICULTY.normal).label})`);
+        }
+        document.querySelector('#ranking summary').textContent = offline ? 'Ranking (local, sin conexión)' : 'Ranking';
+        document.getElementById('ranking-list').replaceChildren(...(lines.length ? lines : ['Aún no hay puntuaciones']).map(text => {
             const li = document.createElement('li');
-            li.textContent = entry
-                ? `${entry.name} — ${entry.score} (${(DIFFICULTY[entry.difficulty] || DIFFICULTY.normal).label})`
-                : 'Aún no hay puntuaciones';
+            li.textContent = text;
             return li;
         }));
+    }
+
+    async refreshRanking() {
+        if (this.rankingLoading) return;
+        this.rankingLoading = true;
+        this.renderRanking();
+        try {
+            this.onlineRanking = await RankingApi.fetchRanking(RANKING_SIZE);
+        } catch (e) {
+            this.onlineRanking = null;
+        }
+        this.rankingLoading = false;
+        this.renderRanking();
     }
 
     // --- Pantallas (overlay HTML) ----------------------------------------------------
@@ -254,11 +277,13 @@ class Game {
         this.overlayStars.innerHTML = '';
         this.overlayScore.textContent = score;
         this.nameEntry.hidden = true;
+        this.setNameStatus('');
         this.panels.hidden = !panels;
         this.difficultySelect.disabled = this.state !== 'menu'; // la dificultad se elige al empezar
         if (panels) {
             this.renderAchievements();
             this.renderRanking();
+            if (!this.onlineRanking) this.refreshRanking(); // tras un fallo se reintenta en el siguiente menú
         }
         this.overlayButtons.replaceChildren(...buttons.map(({ label, action, secondary }) => {
             const btn = document.createElement('button');
@@ -352,12 +377,60 @@ class Game {
         this.overlay.classList.add('hidden');
     }
 
-    // Pide nombre para el ranking si la puntuación entra en el top 10.
+    // Al acabar la partida se pide el nombre para subir la puntuación al ranking online.
     offerRanking() {
-        if (!this.progress.qualifiesForRanking(this.player.score)) return;
+        this.savedLocally = false;
+        if (this.player.score <= 0) return;
         this.nameEntry.hidden = false;
-        this.nameInput.value = '';
-        if (!IS_TOUCH) this.nameInput.focus();
+        this.nameInput.value = this.progress.data.playerName;
+        if (!IS_TOUCH) {
+            this.nameInput.focus();
+            this.nameInput.select();
+        }
+    }
+
+    setNameStatus(text) {
+        this.nameStatus.textContent = text;
+        this.nameStatus.hidden = !text;
+    }
+
+    async sendScore() {
+        const name = this.nameInput.value.trim().slice(0, NAME_MAX);
+        if (!name || this.sending) return;
+        const score = this.player.score;
+        const state = this.state;
+        if (!this.savedLocally) {
+            this.progress.addToRanking(name, score, this.progress.settings.difficulty);
+            this.savedLocally = true;
+        }
+        this.progress.data.playerName = name;
+        this.progress.save();
+
+        this.sending = true;
+        this.nameInput.disabled = this.nameSubmit.disabled = true;
+        this.setNameStatus('Enviando…');
+        let result = null;
+        try {
+            result = await RankingApi.submitScore(name, score);
+        } catch (e) { /* se avisa abajo y se puede reintentar */ }
+        this.sending = false;
+        this.nameInput.disabled = this.nameSubmit.disabled = false;
+        if (this.state !== state) return; // se ha salido de la pantalla mientras tanto
+
+        if (!result) {
+            this.setNameStatus('No se pudo enviar. Revisa la conexión y pulsa Enviar para reintentar.');
+            if (!IS_TOUCH) this.nameInput.focus(); // Enter reintenta en vez de pulsar el botón elegido
+            return;
+        }
+        this.nameEntry.hidden = true;
+        this.setNameStatus(`¡Puesto #${result.position} en el ranking!`);
+        // Se enseña el ranking actualizado debajo de los botones
+        this.panels.hidden = false;
+        this.renderAchievements();
+        const ranking = document.getElementById('ranking');
+        ranking.open = true;
+        await this.refreshRanking();
+        ranking.scrollIntoView({ block: 'nearest' });
     }
 
     showMenu() {

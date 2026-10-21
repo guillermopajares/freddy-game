@@ -36,7 +36,8 @@ Scripts clásicos cargados en orden desde `index.html`; todo son globales (`clas
 | `js/scenery.js` | Decorado de David: fondo con parallax, plataformas con relieve, sombras, puerta |
 | `js/level.js` | Clase `Level` + datos de los 5 niveles (formato compacto, ver `docs/levels.md`) |
 | `js/story.js` | Textos de historia entre niveles |
-| `js/progress.js` | Guardado (localStorage), ajustes, dificultad, logros, ranking. Sin DOM: testeable |
+| `js/progress.js` | Guardado (localStorage), ajustes, dificultad, logros, ranking local. Sin DOM: testeable |
+| `js/api.js` | Cliente del ranking online (`RankingApi`, contrato en `api.md`). Sin DOM: testeable |
 | `js/game.js` | Bucle, estados, cámara, combate, jefes, riada, menús HTML |
 | `tools/build-assets.js` | Regenera `js/assets.js` desde `assets/` |
 
@@ -85,6 +86,8 @@ Detalles clave:
 - **Medir rendimiento sin `getImageData`:** leer píxeles del canvas hace que Chrome lo pase a modo software
   y falsea la medida (y ralentiza la pestaña hasta recargar).
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
+- **El ranking online es producción**: no enviar puntuaciones de prueba a `API_URL`. En tests se simula `fetch`;
+  en el navegador, interceptar `**/api/**` con Playwright. Si la API falla se muestra el ranking local.
 
 ## Depurar en el navegador
 

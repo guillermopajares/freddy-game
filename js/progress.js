@@ -2,6 +2,7 @@
 // Sin dependencias del navegador para poder probarlo en Node (storage = localStorage o null).
 const PROGRESS_KEY = 'freddyProgress';
 const RANKING_SIZE = 10;
+const NAME_MAX = 15; // la API admite 30, pero en el panel caben unos 15
 
 const DIFFICULTY = {
     easy: { label: 'Fácil', lives: 5, enemyHealth: 0.6, bossHealth: 0.7, elite: false },
@@ -34,7 +35,8 @@ class Progress {
             best: {},
             highScore: 0,
             achievements: {},
-            ranking: [],
+            ranking: [],        // copia local: se muestra si la API no contesta
+            playerName: '',     // último nombre usado, para no reescribirlo cada partida
             stats: { stomps: 0 },
             ...saved,
             settings: { ...DEFAULT_SETTINGS, ...(saved.settings || {}) },
@@ -86,13 +88,8 @@ class Progress {
         }
     }
 
-    qualifiesForRanking(score) {
-        const r = this.data.ranking;
-        return score > 0 && (r.length < RANKING_SIZE || score > r[r.length - 1].score);
-    }
-
     addToRanking(name, score, difficulty) {
-        const entry = { name: name.trim().slice(0, 10) || '???', score, difficulty };
+        const entry = { name: name.trim().slice(0, NAME_MAX) || '???', score, difficulty };
         this.data.ranking.push(entry);
         this.data.ranking.sort((a, b) => b.score - a.score);
         this.data.ranking = this.data.ranking.slice(0, RANKING_SIZE);
@@ -101,4 +98,4 @@ class Progress {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = { Progress, ACHIEVEMENTS, DIFFICULTY, RANKING_SIZE };
+if (typeof module !== 'undefined') module.exports = { Progress, ACHIEVEMENTS, DIFFICULTY, RANKING_SIZE, NAME_MAX };
