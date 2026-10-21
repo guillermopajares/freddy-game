@@ -105,10 +105,11 @@ class Game {
             // Las hojas nuevas van apretadas: se limpian trozos de frames vecinos (keepLargest)
             this.sheets = {};
             for (const [id, c] of Object.entries(CHARACTERS)) {
-                this.sheets[id] = new SpriteSheet(sources[id], c.frames, id !== 'freddy');
+                this.sheets[id] = new SpriteSheet(sources[id], c.frames, { keepLargest: id !== 'freddy' });
             }
             this.freddySheet = this.sheets.freddy;
-            this.carSheet = new SpriteSheet(sources.dani_car, DANI_CAR_FRAMES);
+            // El coche no tiene verdes propios: el que asoma por el parabrisas y las ruedas es fondo
+            this.carSheet = new SpriteSheet(sources.dani_car, DANI_CAR_FRAMES, { seeThrough: true });
             this.enemySheet = new SpriteSheet(sources.enemies, ENEMY_FRAMES);
             await Promise.all([
                 ...BACKGROUNDS.map(name => loadImage(sources[name]).then(img => { this.backgrounds[name] = img; done(); })),

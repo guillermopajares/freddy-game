@@ -46,7 +46,9 @@ const ENEMY_FRAMES = {
 // recorte (más los huecos de verde puro), así sobreviven los verdes internos: dígitos 404, babas.
 // keepLargest: borra todo lo que no esté unido a la figura principal (trozos de frames vecinos que
 // se solapan en hojas apretadas).
-function chromaKeyFrame(img, [x, y, w, h], keepLargest = false) {
+// seeThrough: también se borra el verde encerrado (parabrisas, entre ruedas). Solo para hojas sin
+// verdes propios: el JPEG ensucia esos huecos y la pasada de verde puro no los coge.
+function chromaKeyFrame(img, [x, y, w, h], { keepLargest = false, seeThrough = false } = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -72,7 +74,7 @@ function chromaKeyFrame(img, [x, y, w, h], keepLargest = false) {
     }
 
     for (let i = 0; i < d.length; i += 4) {
-        if (d[i + 1] > 240 && d[i] < 15 && d[i + 2] < 15) d[i + 3] = 0;
+        if ((d[i + 1] > 240 && d[i] < 15 && d[i + 2] < 15) || (seeThrough && isBackground(i))) d[i + 3] = 0;
     }
 
     if (keepLargest) keepLargestBlob(d, w, h);
@@ -121,10 +123,11 @@ function keepLargestBlob(d, w, h) {
 }
 
 class SpriteSheet {
-    constructor(src, frameDefs, keepLargest = false) {
+    // keyOpts: opciones de chromaKeyFrame ({ keepLargest, seeThrough }).
+    constructor(src, frameDefs, keyOpts = {}) {
         this.src = src;
         this.frameDefs = frameDefs;
-        this.keepLargest = keepLargest;
+        this.keyOpts = keyOpts;
         this.frames = {};
     }
 
@@ -133,7 +136,7 @@ class SpriteSheet {
             const img = new Image();
             img.onload = () => {
                 for (const [name, rects] of Object.entries(this.frameDefs)) {
-                    this.frames[name] = rects.map(r => ({ canvas: chromaKeyFrame(img, r, this.keepLargest), anchorX: r[4] ?? r[2] / 2 }));
+                    this.frames[name] = rects.map(r => ({ canvas: chromaKeyFrame(img, r, this.keyOpts), anchorX: r[4] ?? r[2] / 2 }));
                 }
                 resolve();
             };
