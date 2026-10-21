@@ -198,10 +198,14 @@ class Game {
         const shake = document.getElementById('opt-shake');
         const flash = document.getElementById('opt-flash');
         const difficulty = document.getElementById('opt-difficulty');
+        const cabinet = document.getElementById('opt-cabinet');
+        const crt = document.getElementById('opt-crt');
         volume.value = s.volume;
         shake.checked = s.shake;
         flash.checked = s.flash;
         difficulty.value = s.difficulty;
+        cabinet.value = s.cabinet;
+        crt.checked = s.crt;
         Sound.setVolume(s.volume / 100);
 
         const onChange = (e) => {
@@ -209,11 +213,14 @@ class Game {
             s.shake = shake.checked;
             s.flash = flash.checked;
             s.difficulty = difficulty.value;
+            s.cabinet = cabinet.value;
+            s.crt = crt.checked;
             Sound.setVolume(s.volume / 100);
             this.progress.save();
+            if (this.onLayoutChange) this.onLayoutChange(); // main.js recoloca el mueble
             if (e.type === 'change') e.target.blur(); // que Espacio/flechas vuelvan al juego
         };
-        [volume, shake, flash, difficulty].forEach(el => {
+        [volume, shake, flash, difficulty, cabinet, crt].forEach(el => {
             el.addEventListener('input', onChange);
             el.addEventListener('change', onChange);
         });

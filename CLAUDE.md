@@ -97,6 +97,9 @@ Detalles clave:
 - **Nuevo personaje:** hoja en `art/` → copiarla a `assets/<id>.jpg`, entrada en `ASSET_FILES`, frames y entrada en
   `CHARACTERS` (`js/characters.js`), `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
   el salto de cada personaje que llega a todo. La selección muestra cinco por fila (`button.character`).
+- **Mueble de recreativa:** `main.js` (`fit`) pone `data-cabinet="full|compact|off"` en `<html>` según el ajuste
+  `cabinet` y el tamaño de la ventana (táctil: siempre `off`), y `no-crt` si se quita el efecto del cristal. Cada modo
+  tiene su tamaño lógico en `SIZES`; si se añade algo al mueble que cambie su alto, actualizarlo ahí.
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
 
 ## Depurar en el navegador
