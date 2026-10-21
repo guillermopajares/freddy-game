@@ -44,7 +44,9 @@ const ENEMY_FRAMES = {
 
 // Recorta un frame y quita el fondo verde. Solo se borra el verde conectado con el borde del
 // recorte (más los huecos de verde puro), así sobreviven los verdes internos: dígitos 404, babas.
-function chromaKeyFrame(img, [x, y, w, h]) {
+// keepLargest: borra todo lo que no esté unido a la figura principal (trozos de frames vecinos que
+// se solapan en hojas apretadas).
+function chromaKeyFrame(img, [x, y, w, h], keepLargest = false) {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -73,6 +75,8 @@ function chromaKeyFrame(img, [x, y, w, h]) {
         if (d[i + 1] > 240 && d[i] < 15 && d[i + 2] < 15) d[i + 3] = 0;
     }
 
+    if (keepLargest) keepLargestBlob(d, w, h);
+
     // Despill: el halo verdoso pegado al fondo se neutraliza.
     for (let p = 0; p < w * h; p++) {
         const i = p * 4;
@@ -87,10 +91,40 @@ function chromaKeyFrame(img, [x, y, w, h]) {
     return canvas;
 }
 
+// Etiqueta las manchas opacas (4-vecinos) y deja transparentes todas menos la mayor.
+function keepLargestBlob(d, w, h) {
+    const label = new Int32Array(w * h);
+    const sizes = [0];
+    const stack = [];
+    for (let start = 0; start < w * h; start++) {
+        if (label[start] || d[start * 4 + 3] === 0) continue;
+        const id = sizes.length;
+        let size = 0;
+        label[start] = id;
+        stack.push(start);
+        while (stack.length) {
+            const p = stack.pop();
+            size++;
+            const px = p % w;
+            for (const q of [px > 0 ? p - 1 : -1, px < w - 1 ? p + 1 : -1, p - w, p + w]) {
+                if (q < 0 || q >= w * h || label[q] || d[q * 4 + 3] === 0) continue;
+                label[q] = id;
+                stack.push(q);
+            }
+        }
+        sizes.push(size);
+    }
+    const biggest = sizes.indexOf(Math.max(...sizes));
+    for (let p = 0; p < w * h; p++) {
+        if (label[p] !== biggest) d[p * 4 + 3] = 0;
+    }
+}
+
 class SpriteSheet {
-    constructor(src, frameDefs) {
+    constructor(src, frameDefs, keepLargest = false) {
         this.src = src;
         this.frameDefs = frameDefs;
+        this.keepLargest = keepLargest;
         this.frames = {};
     }
 
@@ -99,7 +133,7 @@ class SpriteSheet {
             const img = new Image();
             img.onload = () => {
                 for (const [name, rects] of Object.entries(this.frameDefs)) {
-                    this.frames[name] = rects.map(r => ({ canvas: chromaKeyFrame(img, r), anchorX: r[4] ?? r[2] / 2 }));
+                    this.frames[name] = rects.map(r => ({ canvas: chromaKeyFrame(img, r, this.keepLargest), anchorX: r[4] ?? r[2] / 2 }));
                 }
                 resolve();
             };

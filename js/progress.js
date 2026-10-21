@@ -21,9 +21,10 @@ const ACHIEVEMENTS = {
     stomper: 'Pies de plomo: 25 pisotones en total',
     speedrun: 'Con prisa: nivel 1 en menos de 60 segundos',
     hardWin: 'Senior: gana la partida en Difícil',
+    bossRival: 'Sin rencores: derrota a un compañero rival',
 };
 
-const DEFAULT_SETTINGS = { volume: 70, shake: true, flash: true, difficulty: 'normal' };
+const DEFAULT_SETTINGS = { volume: 70, shake: true, flash: true, difficulty: 'normal', character: 'freddy' };
 
 class Progress {
     constructor(storage) {

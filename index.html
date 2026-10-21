@@ -56,16 +56,16 @@
                     <details id="controls">
                         <summary>Controles</summary>
                         <div id="controls-info">
-                            <div class="key-row"><span class="key">W</span><span class="key-desc">Saltar (x2, en pared)</span></div>
-                            <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key-desc">Moverse</span></div>
-                            <div class="key-row"><span class="key">S</span><span class="key-desc">Agacharse / caída rápida</span></div>
-                            <div class="key-row"><span class="key">SHIFT</span><span class="key-desc">Dash (invulnerable)</span></div>
-                            <div class="key-row"><span class="key">SPC</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
-                            <div class="key-row"><span class="key">F</span><span class="key-desc">Desatascador (para proyectiles)</span></div>
-                            <div class="key-row"><span class="key">ESC</span><span class="key-desc">Pausa</span></div>
+                            <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key">◀▶</span><span class="key-desc">Moverse</span></div>
+                            <div class="key-row"><span class="key">SPC</span><span class="key">W</span><span class="key">▲</span><span class="key-desc">Saltar (mantener: más alto; x2, en pared)</span></div>
+                            <div class="key-row"><span class="key">S</span><span class="key">▼</span><span class="key-desc">Agacharse / caída rápida</span></div>
+                            <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
+                            <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
+                            <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
+                            <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
                             <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
                             <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
-                            <div class="key-row"><span class="key">🎮</span><span class="key-desc">Mando compatible</span></div>
+                            <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · gatillos dash · Start pausa</span></div>
                         </div>
                     </details>
                     <details id="achievements">
@@ -86,21 +86,22 @@
     <!-- Solo visibles en pantallas táctiles (ver css) -->
     <div id="touch-controls">
         <div class="touch-pad">
-            <button data-code="KeyA" aria-label="Izquierda">◀</button>
-            <button data-code="KeyS" aria-label="Agacharse">▼</button>
-            <button data-code="KeyD" aria-label="Derecha">▶</button>
+            <button data-action="left" aria-label="Izquierda">◀</button>
+            <button data-action="down" aria-label="Agacharse">▼</button>
+            <button data-action="right" aria-label="Derecha">▶</button>
         </div>
         <div class="touch-pad">
-            <button data-code="ShiftLeft" aria-label="Dash">💨</button>
-            <button data-code="KeyF" aria-label="Desatascador">🪠</button>
-            <button data-code="Space" aria-label="Papel">🧻</button>
-            <button data-code="KeyW" aria-label="Saltar" class="big">▲</button>
+            <button data-action="dash" aria-label="Dash">💨</button>
+            <button data-action="melee" aria-label="Golpe">🪠</button>
+            <button data-action="fire" aria-label="Papel">🧻</button>
+            <button data-action="jump" aria-label="Saltar" class="big">▲</button>
         </div>
-        <button id="touch-pause" data-code="Escape" aria-label="Pausa">II</button>
+        <button id="touch-pause" data-action="pause" aria-label="Pausa">II</button>
     </div>
 
     <script src="js/asset-files.js"></script>
     <script src="js/sprite.js"></script>
+    <script src="js/characters.js"></script>
     <script src="js/input.js"></script>
     <script src="js/sound.js"></script>
     <script src="js/collision.js"></script>

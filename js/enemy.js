@@ -643,6 +643,113 @@ class BossGlitch extends Error404 {
     }
 }
 
-const ENEMY_TYPES = { CodeBug, Error404, Boss404, BossSpider, BossBug, BossGlitch };
+// Rival: otro personaje jugable como jefe. Camina hacia Freddy, pega puñetazos, tira papel y salta.
+// Si es Dani, a veces embiste con el coche. sheet/carSheet llegan en opts desde el juego.
+// Solo en arenas con suelo entero: no mira los bordes.
+class BossRival extends Enemy {
+    constructor(x, y, opts = {}) {
+        const c = opts.character || {};
+        super(x, y, {
+            width: 56, height: 150, health: 22, scale: (c.scale || 0.4) * 1.36, score: 1500,
+            anims: { walk: 'walk', run: 'run', attack: 'melee', throw: 'throw', jump: 'jump', ram: 'run', death: 'death' },
+            animSpeeds: { walk: 9, run: 5, attack: 6, throw: 6 },
+        });
+        this.character = c;
+        this.sheet = opts.sheet;
+        this.carSheet = opts.carSheet;
+        this.isBoss = true;
+        this.heavy = true;
+        this.name = `${(c.name || 'RIVAL').toUpperCase()} (RIVAL)`;
+        this.achievement = 'bossRival';
+        this.phase = 1;
+        this.cooldown = 70;
+        this.actions = 0;
+    }
+
+    think(player, level, game) {
+        if (this.cooldown > 0) this.cooldown--;
+        if (this.phase === 1 && this.health <= this.maxHealth / 2) {
+            this.phase = 2;
+            game.announce(`¡${this.character.name.toUpperCase()} SE ENFADA!`);
+            Sound.play('bossPhase');
+        }
+        const fast = this.phase === 2;
+
+        if (this.state === 'attack') {
+            this.velocityX = 0;
+            if (this.stateTime >= 24) this.endAction();
+            return;
+        }
+        if (this.state === 'throw') {
+            this.velocityX = 0;
+            if (this.stateTime === 10) {
+                for (const vy of fast ? [-1.5, 0, 1.5] : [0]) {
+                    const px = this.facing === 1 ? this.x + this.width : this.x - PROJECTILE_TYPES.paper.width;
+                    game.enemyProjectiles.push(new Projectile(px, this.y + 50, this.facing, 'paper', vy));
+                }
+                Sound.play('throw');
+            }
+            if (this.stateTime >= 20) this.endAction();
+            return;
+        }
+        if (this.state === 'ram') {
+            this.velocityX = 8 * this.facing;
+            if (this.stateTime >= 50) this.endAction();
+            return;
+        }
+        if (this.state === 'jump') {
+            if (this.onGround && this.stateTime > 5) this.endAction();
+            return;
+        }
+
+        const dx = this.facePlayer(player);
+        this.setState('walk');
+        // Las arenas tienen suelo entero: puede bajarse de las plataformas sin caer al vacío.
+        this.velocityX = (fast ? 2.4 : 1.6) * this.facing;
+        if (this.cooldown > 0) return;
+
+        this.actions++;
+        const rise = this.y + this.height - (player.y + player.height);
+        if (Math.abs(dx) < 90) {
+            this.setState('attack');
+        } else if (this.character.car && this.actions % 3 === 0) {
+            this.setState('ram');
+            Sound.play('dash');
+        } else if (rise > 60 && this.onGround) {
+            this.setState('jump');
+            this.velocityY = -14;
+            this.velocityX = Math.max(-5, Math.min(5, dx / 30));
+        } else {
+            this.setState('throw');
+        }
+    }
+
+    endAction() {
+        this.setState('walk');
+        this.velocityX = 0;
+        this.cooldown = this.phase === 1 ? 70 : 45;
+    }
+
+    // Puñetazo: activo a mitad del golpe, por delante del rival.
+    getAttackBounds() {
+        if (this.state === 'ram') return this.getBounds();
+        if (this.state !== 'attack' || this.stateTime < 8 || this.stateTime > 18) return null;
+        return { x: this.facing === 1 ? this.x + this.width : this.x - 60, y: this.y + 30, width: 60, height: 60 };
+    }
+
+    draw(ctx) {
+        if (this.state === 'ram' && !this.dying) {
+            ctx.save();
+            if (this.hitTimer > 0 && this.hitTimer % 4 < 2) ctx.globalAlpha = 0.5;
+            this.carSheet.draw(ctx, 'drive', Math.floor(this.stateTime / 5), this.x + this.width / 2,
+                this.y + this.height, CAR_SCALE * 1.36, this.facing);
+            ctx.restore();
+            return;
+        }
+        super.draw(ctx, this.sheet);
+    }
+}
+
+const ENEMY_TYPES = { CodeBug, Error404, Boss404, BossSpider, BossBug, BossGlitch, BossRival };
 
 if (typeof module !== 'undefined') module.exports = { Enemy, ENEMY_TYPES };

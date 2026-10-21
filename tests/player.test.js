@@ -34,7 +34,8 @@ describe('Player', () => {
 
     test('salto y doble salto alcanzan las alturas previstas', () => {
         const floor = player.y;
-        input.pressed.add('KeyW');
+        input.down.add('jump'); // mantenido: salto completo
+        input.pressed.add('jump');
         let top = floor;
         for (let i = 0; i < 30; i++) {
             run(player, input, 1, level);
@@ -43,7 +44,7 @@ describe('Player', () => {
         expect(floor - top).toBeGreaterThan(130);
         expect(floor - top).toBeLessThan(160);
 
-        input.pressed.add('KeyW'); // doble salto en el aire
+        input.pressed.add('jump'); // doble salto en el aire
         for (let i = 0; i < 30; i++) {
             run(player, input, 1, level);
             top = Math.min(top, player.y);
@@ -51,17 +52,51 @@ describe('Player', () => {
         expect(floor - top).toBeGreaterThan(200);
     });
 
+    test('soltar el salto pronto da un salto corto', () => {
+        const floor = player.y;
+        input.pressed.add('jump');
+        let top = floor;
+        for (let i = 0; i < 30; i++) {
+            run(player, input, 1, level);
+            top = Math.min(top, player.y);
+        }
+        expect(floor - top).toBeLessThan(60);
+    });
+
+    test('se puede saltar unos frames después de salir del borde y pulsar justo antes de aterrizar', () => {
+        const ledge = { x: 0, y: 650, width: 120, height: 70, ground: true };
+        const edgeLevel = { platforms: [ledge], width: 960, leftWall: 0 };
+        player.x = 110;
+        input.down.add('right');
+        run(player, input, 6, edgeLevel); // ya ha salido del borde
+        expect(player.onGround).toBe(false);
+        input.pressed.add('jump');
+        input.down.add('jump');
+        run(player, input, 1, edgeLevel);
+        expect(player.velocityY).toBeLessThan(-10);
+        expect(player.jumpsLeft).toBe(1);
+
+        player.x = 50;
+        player.y = 650 - 108 - 30; // cayendo, a punto de aterrizar sin saltos en el aire
+        player.velocityY = 4;
+        player.jumpsLeft = 0;
+        input.down.clear();
+        input.pressed.add('jump');
+        run(player, input, 10, level);
+        expect(player.velocityY).toBeLessThan(0);
+    });
+
     test('lanzar papel gasta munición; el rollo gigante cuesta 3', () => {
         player.ammo = 10;
-        input.pressed.add('Space');
+        input.pressed.add('fire');
         run(player, input, 1, level);
         expect(player.ammo).toBe(9);
         expect(player.projectiles[0].type).toBe('paper');
 
         run(player, input, 30, level);
-        input.down.add('Space');
+        input.down.add('fire');
         run(player, input, 50, level);
-        input.down.delete('Space');
+        input.down.delete('fire');
         run(player, input, 1, level);
         expect(player.ammo).toBe(6);
         expect(player.projectiles.some(p => p.type === 'paperBig')).toBe(true);
@@ -89,11 +124,11 @@ describe('Player', () => {
     });
 
     test('no se levanta si hay una plataforma encima de la cabeza', () => {
-        input.down.add('KeyS');
+        input.down.add('down');
         run(player, input, 2, level);
         expect(player.crouching).toBe(true);
         level.platforms = [GROUND, { x: 0, y: player.y - 20, width: 960, height: 10, ground: true }];
-        input.down.delete('KeyS');
+        input.down.delete('down');
         run(player, input, 2, level);
         expect(player.crouching).toBe(true);
     });
@@ -119,7 +154,7 @@ describe('Player', () => {
     describe('handleInput', () => {
         it('shrinks to crouch height while keeping the feet on the ground', () => {
             const player = playerOnGround();
-            player.handleInput(fakeInput('KeyS'), [groundPlatform]);
+            player.handleInput(fakeInput('down'), [groundPlatform]);
             expect(player.crouching).toBe(true);
             expect(player.height).toBe(player.crouchHeight);
             expect(player.y + player.height).toBe(GROUND_Y);
@@ -127,19 +162,19 @@ describe('Player', () => {
 
         it('walks at half speed while crouching', () => {
             const player = playerOnGround();
-            player.handleInput(fakeInput('KeyS', 'KeyD'), [groundPlatform]);
+            player.handleInput(fakeInput('down', 'right'), [groundPlatform]);
             expect(player.crouching).toBe(true);
             expect(player.velocityX).toBe(player.speed * 0.5);
             expect(player.facing).toBe(1);
 
-            player.handleInput(fakeInput('KeyS', 'KeyA'), [groundPlatform]);
+            player.handleInput(fakeInput('down', 'left'), [groundPlatform]);
             expect(player.velocityX).toBe(-player.speed * 0.5);
             expect(player.facing).toBe(-1);
         });
 
         it('walks at full speed when not crouching', () => {
             const player = playerOnGround();
-            player.handleInput(fakeInput('KeyD'), [groundPlatform]);
+            player.handleInput(fakeInput('right'), [groundPlatform]);
             expect(player.crouching).toBe(false);
             expect(player.velocityX).toBe(player.speed);
         });
@@ -147,7 +182,7 @@ describe('Player', () => {
         it('stands up under a floating platform', () => {
             const player = playerOnGround();
             const low = { x: 280, y: 580, width: 120, height: 20 };
-            player.handleInput(fakeInput('KeyS'), [groundPlatform, low]);
+            player.handleInput(fakeInput('down'), [groundPlatform, low]);
             expect(player.crouching).toBe(true);
 
             player.handleInput(fakeInput(), [groundPlatform, low]);
@@ -158,9 +193,34 @@ describe('Player', () => {
         it('stays crouched under solid ground overhead', () => {
             const player = playerOnGround();
             const solidCeiling = { x: 280, y: 520, width: 120, height: 40, ground: true };
-            player.handleInput(fakeInput('KeyS'), [groundPlatform, solidCeiling]);
+            player.handleInput(fakeInput('down'), [groundPlatform, solidCeiling]);
             player.handleInput(fakeInput(), [groundPlatform, solidCeiling]);
             expect(player.crouching).toBe(true);
         });
+    });
+});
+
+describe('Personajes', () => {
+    const level = { platforms: [GROUND], width: 960, leftWall: 0 };
+
+    test('Dani embiste en coche: dash largo, invencible y daña (ramming)', () => {
+        const input = makeInput();
+        const dani = new Player(100, 650 - 108, { character: { car: true } });
+        run(dani, input, 2, level);
+        input.pressed.add('dash');
+        run(dani, input, 30, level);
+        expect(dani.ramming).toBe(true);
+        expect(dani.invincible).toBe(true);
+        const freddy = new Player(100, 650 - 108);
+        input.pressed.add('dash');
+        run(freddy, input, 30, level);
+        expect(freddy.dashTimer).toBe(0);
+        expect(freddy.ramming).toBeFalsy();
+    });
+
+    test('las estadísticas del personaje cambian a Player', () => {
+        const fer = new Player(0, 0, { character: { punch: 1, speed: 4.2 } });
+        expect(fer.meleeDamage).toBe(3);
+        expect(fer.speed).toBe(4.2);
     });
 });

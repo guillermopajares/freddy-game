@@ -304,6 +304,18 @@ body {
     cursor: pointer;
 }
 
+/* Selección de personaje: retrato encima del nombre */
+#overlay-buttons button.character {
+    width: 200px;
+    font-size: 14px;
+}
+
+#overlay-buttons button.character img {
+    display: block;
+    height: 110px;
+    margin: 0 auto 6px;
+}
+
 #overlay-buttons button.secondary {
     background: #2a2a2a;
     border-color: #4a4a4a;

@@ -9,6 +9,10 @@ const ASSET_FILES = {
     bg_04: 'assets/bg_04.png',
     bg_05: 'assets/bg_05.png',
     enemies: 'assets/enemies.jpg',
+    dani: 'assets/dani.jpg',
+    dani_car: 'assets/dani_car.jpg',
+    fer: 'assets/fer.jpg',
+    guille: 'assets/guille.jpg',
 };
 
 if (typeof module !== 'undefined') module.exports = ASSET_FILES;

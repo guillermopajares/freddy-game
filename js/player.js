@@ -2,9 +2,16 @@ const PLAYER_SCALE = 0.4;
 const CHARGE_TIME = 45; // frames manteniendo el disparo para el rollo gigante
 const POWER_TIME = 900; // 15 s de desatascador dorado / papel triple
 const ANIM_SPEED = { idle: 30, walk: 7, run: 4 };
+const CAR_SCALE = 0.22;
+const RAM_TIME = 40; // la embestida en coche dura más que el dash y hace daño
+const COYOTE_TIME = 6; // frames tras salir de un borde en los que aún se puede saltar
+const JUMP_BUFFER = 8; // frames que se recuerda un salto pulsado justo antes de aterrizar
+const JUMP_CUT = -4; // soltar el salto mientras sube lo corta: salto corto
 
 class Player {
+    // stats.character: entrada de CHARACTERS (sin ella, Freddy).
     constructor(x, y, stats = {}) {
+        this.character = stats.character || {};
         this.spawnX = x;
         this.spawnY = y;
         this.x = x;
@@ -15,8 +22,8 @@ class Player {
         this.crouchHeight = 80;
         this.velocityX = 0;
         this.velocityY = 0;
-        this.speed = 3.5;
-        this.jumpForce = -12;
+        this.speed = this.character.speed ?? 3.5;
+        this.jumpForce = this.character.jumpForce ?? -12;
         this.onGround = false;
         this.ground = null;
         this.facing = 1;
@@ -37,6 +44,9 @@ class Player {
         this.touchingWall = 0;
         this.maxJumps = 2;
         this.jumpsLeft = 2;
+        this.coyote = 0;
+        this.jumpBuffer = 0;
+        this.jumpHeld = false; // salto iniciado por el jugador que aún se puede cortar
 
         this.attackCooldown = 0;
         this.action = null; // { name: 'throw' | 'melee' | 'hurt' | 'downed' | 'land', timer, duration }
@@ -61,7 +71,12 @@ class Player {
     }
 
     get meleeDamage() {
-        return this.powers.gold > 0 ? 3 : 2;
+        return (this.powers.gold > 0 ? 3 : 2) + (this.character.punch || 0);
+    }
+
+    // Dani: su dash es una embestida en coche que daña a lo que atropella.
+    get ramming() {
+        return this.character.car && this.dashTimer > 0;
     }
 
     update(input, level) {
@@ -112,9 +127,9 @@ class Player {
     }
 
     handleInput(input, platforms) {
-        const left = input.isDown('KeyA') || input.isDown('ArrowLeft');
-        const right = input.isDown('KeyD') || input.isDown('ArrowRight');
-        const down = input.isDown('KeyS') || input.isDown('ArrowDown');
+        const left = input.isDown('left');
+        const right = input.isDown('right');
+        const down = input.isDown('down');
         const stunned = this.stunned;
 
         let crouch = down && this.onGround && !stunned;
@@ -130,16 +145,17 @@ class Player {
             this.crouching = crouch;
         }
 
-        if ((input.isPressed('ShiftLeft') || input.isPressed('ShiftRight')) && this.dashCooldown === 0 && !crouch && !stunned) {
-            this.dashTimer = 14;
-            this.dashCooldown = 50;
+        if (input.isPressed('dash') && this.dashCooldown === 0 && !crouch && !stunned) {
+            this.dashTimer = this.character.car ? RAM_TIME : 14;
+            this.dashCooldown = this.character.car ? 90 : 50;
+            this.meleeHits.clear();
             Sound.play('dash');
         }
 
         if (this.dashTimer > 0) {
             this.dashTimer--;
             this.velocityX = this.dashSpeed * this.facing;
-            this.velocityY = 0;
+            if (!this.character.car) this.velocityY = 0; // el coche no vuela: cae por los huecos
         } else if (stunned) {
             this.velocityX *= 0.92;
         } else if (this.wallJumpLockout > 0) {
@@ -162,33 +178,48 @@ class Player {
         if (stunned) return;
 
         // Caída rápida
-        if (!this.onGround && (input.isPressed('KeyS') || input.isPressed('ArrowDown'))) {
+        if (!this.onGround && input.isPressed('down')) {
             this.velocityY = 15;
         }
 
-        if (input.isPressed('KeyW') || input.isPressed('ArrowUp')) {
-            if (this.onGround) {
-                this.velocityY = this.jumpForce;
-                this.onGround = false;
-                this.jumpsLeft = this.maxJumps - 1;
-                Sound.play('jump');
-            } else if (this.touchingWall !== 0) {
-                this.velocityY = this.jumpForce * 0.9;
-                this.velocityX = -this.touchingWall * this.speed * 1.5;
-                this.wallJumpLockout = 15;
-                this.facing = -this.touchingWall;
-                this.jumpsLeft = this.maxJumps - 1;
-                Sound.play('jump');
-            } else if (this.jumpsLeft > 0) {
-                this.velocityY = this.jumpForce * 0.8;
-                this.jumpsLeft--;
-                Sound.play('doubleJump');
-            }
+        // Salto que perdona: vale unos frames después de salir del borde (coyote) y se recuerda si
+        // se pulsa justo antes de aterrizar (buffer). Soltarlo mientras sube da un salto corto.
+        this.coyote = this.onGround ? COYOTE_TIME : Math.max(0, this.coyote - 1);
+        const jumpPressed = input.isPressed('jump');
+        this.jumpBuffer = jumpPressed ? JUMP_BUFFER : Math.max(0, this.jumpBuffer - 1);
+        if (this.jumpBuffer > 0 && this.coyote > 0) {
+            this.velocityY = this.jumpForce;
+            this.onGround = false;
+            this.coyote = 0;
+            this.jumpBuffer = 0;
+            this.jumpsLeft = this.maxJumps - 1;
+            this.jumpHeld = true;
+            Sound.play('jump');
+        } else if (jumpPressed && this.touchingWall !== 0) {
+            this.velocityY = this.jumpForce * 0.9;
+            this.velocityX = -this.touchingWall * this.speed * 1.5;
+            this.wallJumpLockout = 15;
+            this.facing = -this.touchingWall;
+            this.jumpsLeft = this.maxJumps - 1;
+            this.jumpBuffer = 0;
+            this.jumpHeld = true;
+            Sound.play('jump');
+        } else if (jumpPressed && this.jumpsLeft > 0) {
+            this.velocityY = this.jumpForce * 0.8;
+            this.jumpsLeft--;
+            this.jumpBuffer = 0;
+            this.jumpHeld = true;
+            Sound.play('doubleJump');
+        }
+        if (this.velocityY >= 0) this.jumpHeld = false;
+        if (this.jumpHeld && !input.isDown('jump') && this.velocityY < JUMP_CUT) {
+            this.velocityY = JUMP_CUT;
+            this.jumpHeld = false;
         }
 
         // Papel: pulsar = rollo normal; mantener CHARGE_TIME frames = rollo gigante que atraviesa.
-        const fireHeld = input.isDown('Space') || input.isDown('KeyP');
-        const firePressed = input.isPressed('Space') || input.isPressed('KeyP');
+        const fireHeld = input.isDown('fire');
+        const firePressed = input.isPressed('fire');
         if ((fireHeld || firePressed) && this.ammo > 0 && this.attackCooldown === 0) {
             this.charge++;
         }
@@ -197,7 +228,7 @@ class Player {
             this.charge = 0;
         }
 
-        if (input.isPressed('KeyF') && this.attackCooldown === 0) {
+        if (input.isPressed('melee') && this.attackCooldown === 0) {
             this.charge = 0;
             this.attackCooldown = 26;
             this.action = { name: 'melee', timer: 22, duration: 22 };
@@ -227,7 +258,7 @@ class Player {
         if (!this.action || this.action.name !== 'melee') return null;
         const progress = 1 - this.action.timer / this.action.duration;
         if (progress < 0.25 || progress > 0.85) return null;
-        const reach = this.powers.gold > 0 ? 110 : 75;
+        const reach = (this.powers.gold > 0 ? 110 : 75) + (this.character.reach || 0);
         return {
             x: this.facing === 1 ? this.x + this.width - 5 : this.x - reach + 5,
             y: this.y + 20,
@@ -278,8 +309,10 @@ class Player {
         return 'idle';
     }
 
-    draw(ctx, sheet) {
+    // carSheet: hoja del coche de Dani (solo se usa mientras embiste).
+    draw(ctx, sheet, carSheet) {
         this.projectiles.forEach(p => p.draw(ctx));
+        const scale = this.character.scale || PLAYER_SCALE;
 
         const name = this.getAnimation();
         const count = sheet.count(name) || 1;
@@ -299,16 +332,22 @@ class Player {
         if (this.invincibleTimer > 0 && Math.floor(this.invincibleTimer / 5) % 2 === 0) {
             ctx.globalAlpha = 0.45;
         }
+        if (this.ramming) {
+            const crash = this.meleeHits.size > 0;
+            carSheet.draw(ctx, crash ? 'crash' : 'drive', Math.floor(this.tick / 5), cx, bottom, CAR_SCALE, this.facing);
+            ctx.restore();
+            return;
+        }
         if (this.dashTimer > 0) {
             ctx.globalAlpha = 0.25;
-            sheet.draw(ctx, name, frame, cx - this.facing * 24, bottom, PLAYER_SCALE, this.facing);
+            sheet.draw(ctx, name, frame, cx - this.facing * 24, bottom, scale, this.facing);
             ctx.globalAlpha = 1;
         }
         if (this.powers.gold > 0 && name === 'melee') {
             ctx.shadowColor = '#ffd700';
             ctx.shadowBlur = 18;
         }
-        sheet.draw(ctx, name, frame, cx, bottom, PLAYER_SCALE, this.facing);
+        sheet.draw(ctx, name, frame, cx, bottom, scale, this.facing);
         ctx.restore();
 
         if (this.shield) {
