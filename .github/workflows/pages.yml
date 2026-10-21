@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Solo lo que necesita el navegador; js/assets.js (20 MB) es para file:// y no hace falta online
-      - run: mkdir site && cp -r index.html css js assets site/ && rm site/js/assets.js
+      - run: mkdir site && cp -r index.html manifest.webmanifest css js assets site/ && rm site/js/assets.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

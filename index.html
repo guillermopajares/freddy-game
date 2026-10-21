@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Freddy Game - Platform Adventure</title>
+    <!-- "Añadir a pantalla de inicio": abre a pantalla completa y en horizontal -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0d0e11">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -215,6 +221,9 @@
             <button data-action="jump" aria-label="Saltar" class="big">▲</button>
         </div>
         <button id="touch-pause" data-action="pause" aria-label="Pausa">II</button>
+        <!-- Sin data-action: lo maneja main.js. Se oculta donde no hay pantalla completa (iPhone) -->
+        <button id="touch-fullscreen" aria-label="Pantalla completa">⛶</button>
+        <p id="rotate-hint">↻ Gira el móvil para verlo más grande</p>
     </div>
 
     <script src="js/asset-files.js"></script>
