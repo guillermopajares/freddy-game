@@ -3,17 +3,18 @@
 class Cabinet {
     constructor(root) {
         this.stick = root.querySelector('#cab-joystick');
-        this.buttons = [...root.querySelectorAll('.cab-btn[data-codes]')].map(el => ({
-            el, codes: el.dataset.codes.split(' '), pressed: false,
+        // data-actions: acciones de BINDINGS (así también se mueven con el mando y los botones táctiles)
+        this.buttons = [...root.querySelectorAll('.cab-btn[data-actions]')].map(el => ({
+            el, actions: el.dataset.actions.split(' '), pressed: false,
         }));
         this.jx = 0;
         this.jy = 0;
     }
 
     update(input) {
-        const left = input.isDown('KeyA') || input.isDown('ArrowLeft');
-        const right = input.isDown('KeyD') || input.isDown('ArrowRight');
-        const down = input.isDown('KeyS') || input.isDown('ArrowDown');
+        const left = input.isDown('left');
+        const right = input.isDown('right');
+        const down = input.isDown('down');
         const jx = (right ? 1 : 0) - (left ? 1 : 0);
         const jy = down ? 1 : 0;
         if (jx !== this.jx || jy !== this.jy) {
@@ -23,7 +24,7 @@ class Cabinet {
             this.stick.style.setProperty('--jy', jy);
         }
         this.buttons.forEach(b => {
-            const pressed = b.codes.some(code => input.isDown(code));
+            const pressed = b.actions.some(action => input.isDown(action));
             if (pressed !== b.pressed) {
                 b.pressed = pressed;
                 b.el.classList.toggle('pressed', pressed);

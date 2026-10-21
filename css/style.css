@@ -390,6 +390,20 @@ body::before {
     cursor: pointer;
 }
 
+/* Selección de personaje: retrato encima del nombre */
+/* Cinco por fila dentro de los 640 px del overlay */
+#overlay-buttons button.character {
+    width: 100px;
+    padding: 6px 4px;
+    font-size: 13px;
+}
+
+#overlay-buttons button.character img {
+    display: block;
+    height: 84px;
+    margin: 0 auto 4px;
+}
+
 #overlay-buttons button.secondary {
     background: #2a2a2a;
     border-color: #4a4a4a;

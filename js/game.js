@@ -102,13 +102,27 @@ class Game {
             const total = Object.keys(sources).length;
             let loaded = 0;
             const done = () => this.drawLoading(++loaded / total);
-            this.freddySheet = new SpriteSheet(sources.freddy, FREDDY_FRAMES);
+            // Las hojas nuevas van apretadas (keepLargest quita trozos de frames vecinos) y no tienen verdes
+            // propios: el que queda entre brazo y cuerpo es fondo (seeThrough)
+            this.sheets = {};
+            for (const [id, c] of Object.entries(CHARACTERS)) {
+                const extra = id !== 'freddy';
+                this.sheets[id] = new SpriteSheet(sources[id], c.frames, { keepLargest: extra, seeThrough: extra });
+            }
+            this.freddySheet = this.sheets.freddy;
+            // El coche no tiene verdes propios: el que asoma por el parabrisas y las ruedas es fondo
+            this.carSheet = new SpriteSheet(sources.dani_car, DANI_CAR_FRAMES, { seeThrough: true });
             this.enemySheet = new SpriteSheet(sources.enemies, ENEMY_FRAMES);
             await Promise.all([
                 ...BACKGROUNDS.map(name => loadImage(sources[name]).then(img => { this.backgrounds[name] = img; done(); })),
-                this.freddySheet.load().then(done),
+                ...Object.values(this.sheets).map(sheet => sheet.load().then(done)),
+                this.carSheet.load().then(done),
                 this.enemySheet.load().then(done),
             ]);
+            this.portraits = {};
+            for (const id of Object.keys(CHARACTERS)) {
+                this.portraits[id] = this.sheets[id].frames.idle[0].canvas.toDataURL();
+            }
         } catch (e) {
             console.error('Failed to load assets', e);
             this.ctx.fillText('Error cargando los sprites', 480, 420);
@@ -252,11 +266,18 @@ class Game {
             this.renderAchievements();
             this.renderRanking();
         }
-        this.overlayButtons.replaceChildren(...buttons.map(({ label, action, secondary }) => {
+        this.overlayButtons.replaceChildren(...buttons.map(({ label, action, secondary, img }) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.textContent = label;
             if (secondary) btn.className = 'secondary';
+            if (img) {
+                const image = new Image();
+                image.src = img;
+                image.alt = '';
+                btn.prepend(image);
+                btn.classList.add('character');
+            }
             btn.addEventListener('pointerdown', e => e.preventDefault()); // sin foco: Enter no lo repite
             btn.addEventListener('click', action);
             return btn;
@@ -294,8 +315,38 @@ class Game {
         });
     }
 
+    // Elegir personaje; los demás aparecen como jefes rivales.
     newGame(levelIndex) {
-        this.showStory(levelIndex, { lives: this.progress.difficulty.lives });
+        this.state = 'select';
+        this.pendingLevel = { index: levelIndex };
+        // Con diez personajes la habilidad no cabe en la tarjeta: se muestra la del seleccionado
+        const chosen = CHARACTERS[this.character];
+        this.showOverlay({
+            title: 'ELIGE PERSONAJE',
+            subtitle: 'LOS DEMÁS SERÁN TUS RIVALES',
+            text: `${chosen.name}: ${chosen.desc}` + (IS_TOUCH ? '' : ' · ◀ ▶ y ENTER para elegir'),
+            buttons: Object.entries(CHARACTERS).map(([id, c]) => ({
+                label: c.name,
+                img: this.portraits[id],
+                secondary: id !== this.character,
+                action: () => this.selectCharacter(id),
+            })),
+        });
+    }
+
+    get character() {
+        return CHARACTERS[this.progress.settings.character] ? this.progress.settings.character : 'freddy';
+    }
+
+    selectCharacter(id) {
+        this.progress.settings.character = id;
+        this.progress.save();
+        this.showStory(this.pendingLevel.index, { lives: this.progress.difficulty.lives });
+    }
+
+    randomRival() {
+        const ids = Object.keys(CHARACTERS).filter(id => id !== this.character);
+        return ids[Math.floor(Math.random() * ids.length)];
     }
 
     showStory(index, stats) {
@@ -318,7 +369,7 @@ class Game {
         this.state = 'paused';
         this.showOverlay({
             title: 'PAUSA',
-            text: IS_TOUCH ? '' : 'ESC para seguir · R para reiniciar el nivel',
+            text: IS_TOUCH ? '' : 'ESC/P para seguir · R para reiniciar el nivel',
             buttons: [
                 { label: 'Seguir', action: () => this.resume() },
                 { label: 'Reiniciar nivel', secondary: true, action: () => this.restartLevel() },
@@ -460,6 +511,7 @@ class Game {
         const d = this.progress.difficulty;
         const enemy = new ENEMY_TYPES[type](x, y, { ...opts, elite: opts.elite || (d.elite && !type.startsWith('Boss')) });
         enemy.health = enemy.maxHealth = Math.max(1, Math.round(enemy.maxHealth * (enemy.isBoss ? d.bossHealth : d.enemyHealth)));
+        if (enemy.isBoss) enemy.rest = d.bossRest || 1;
         return enemy;
     }
 
@@ -486,7 +538,7 @@ class Game {
         this.level.reset();
         this.scenery.setLevel(this.level);
         this.levelTime = 0;
-        this.player = new Player(this.level.spawnX, this.level.spawnY, stats);
+        this.player = new Player(this.level.spawnX, this.level.spawnY, { ...stats, character: CHARACTERS[this.character] });
         this.levelStartStats = { ...stats };
         this.camX = 0;
         this.fade = 1;
@@ -494,7 +546,15 @@ class Game {
         this.enemies = this.level.enemies.map(e => this.createEnemy(e.type, e.x, e.y, e));
         this.enemyProjectiles = [];
         this.boss = null;
-        this.pendingBoss = this.level.boss;
+        const boss = this.level.boss;
+        if (boss && (boss.type === 'BossRival' || Math.random() < (boss.rivalChance || 0))) {
+            const id = this.randomRival();
+            // Sale al suelo de la arena: los jefes que caen se atascan en plataformas pequeñas
+            this.pendingBoss = { ...boss, type: 'BossRival', y: GROUND_Y - 150, character: CHARACTERS[id],
+                sheet: this.sheets[id], carSheet: this.carSheet };
+        } else {
+            this.pendingBoss = boss;
+        }
         this.stolen = false;
         this.combo = 0;
         this.comboTimer = 0;
@@ -526,12 +586,19 @@ class Game {
     handleInput() {
         const input = this.input;
         const typing = !this.nameEntry.hidden;
-        if (input.isPressed('Enter') && !typing) {
+        const inGame = this.state === 'playing' || this.state === 'paused';
+        // Start del mando: pausa en juego, confirma en los menús (si hiciera las dos, se anularían)
+        const start = input.isPressed('start');
+        if ((input.isPressed('confirm') || (start && !inGame)) && !typing) {
             if (this.state === 'menu') this.newGame(0);
+            else if (this.state === 'select') this.selectCharacter(this.character);
             else if (this.state === 'story') this.startPendingLevel();
             else if (this.state === 'levelComplete') this.nextLevel();
             else if (this.state === 'paused') this.resume();
             else if (this.state === 'gameOver' || this.state === 'victory') this.showMenu();
+        } else if (input.isPressed('pause') || (start && inGame)) {
+            if (this.state === 'playing') this.pause();
+            else if (this.state === 'paused') this.resume();
         }
 
         if (this.state === 'menu') {
@@ -540,16 +607,21 @@ class Game {
             }
         }
 
-        if (input.isPressed('Escape')) {
-            if (this.state === 'playing') this.pause();
-            else if (this.state === 'paused') this.resume();
+        // Elegir personaje con izquierda/derecha (teclado o mando) y confirmar
+        if (this.state === 'select') {
+            const dir = (input.isPressed('right') ? 1 : 0) - (input.isPressed('left') ? 1 : 0);
+            if (dir) {
+                const ids = Object.keys(CHARACTERS);
+                this.progress.settings.character = ids[(ids.indexOf(this.character) + dir + ids.length) % ids.length];
+                this.newGame(this.pendingLevel.index);
+            }
         }
 
-        if (input.isPressed('KeyM')) {
+        if (input.isPressed('mute')) {
             this.announce(Sound.toggleMute() ? 'SONIDO: NO' : 'SONIDO: SÍ');
         }
 
-        if (input.isPressed('KeyR') && (this.state === 'playing' || this.state === 'paused')) {
+        if (input.isPressed('restart') && inGame) {
             this.restartLevel();
         }
     }
@@ -729,6 +801,16 @@ class Game {
             });
         });
 
+        // Embestida en coche (Dani): cada enemigo recibe un golpe por embestida
+        if (player.ramming) {
+            alive.forEach(enemy => {
+                if (enemy.dying || player.meleeHits.has(enemy)) return;
+                if (!Collision.aabb(player.getBounds(), enemy.getBounds())) return;
+                player.meleeHits.add(enemy);
+                this.hitEnemy(enemy, 3, '#3a6ea5', player.x + player.width / 2);
+            });
+        }
+
         const melee = player.getMeleeBounds();
         if (melee) {
             alive.forEach(enemy => {
@@ -780,6 +862,16 @@ class Game {
                 Sound.play('stomp');
                 if (++this.progress.data.stats.stomps >= 25) this.unlockAchievement('stomper');
                 this.hitEnemy(enemy, 1, '#ffd700');
+                return;
+            }
+            // Un jefe que solo camina no hace daño al tocarlo: para pegarle hay que estar pegado a él
+            // y, como avanza hacia Freddy, lo volvía a tumbar cada vez que acababa la invulnerabilidad.
+            // Su cuerpo aparta a Freddy: si se quedara dentro, el siguiente ataque le daría sin aviso.
+            if (enemy.isBoss && enemy.state === 'walk') {
+                if (player.dashTimer === 0) {
+                    const fromLeft = player.x + player.width / 2 < enemy.x + enemy.width / 2;
+                    player.x = fromLeft ? enemy.x - player.width : enemy.x + enemy.width;
+                }
                 return;
             }
             this.hurtPlayer(enemy.x + enemy.width / 2, enemy.heavy);
@@ -1023,7 +1115,7 @@ class Game {
     // Al cruzar la puerta, Freddy encoge hacia el centro de la puerta y desaparece.
     drawPlayer(ctx) {
         if (this.state !== 'exiting') {
-            this.player.draw(ctx, this.freddySheet);
+            this.player.draw(ctx, this.sheets[this.character], this.carSheet);
             return;
         }
         const t = Math.min(1, this.exitTimer / 30);
@@ -1035,7 +1127,7 @@ class Game {
         ctx.translate(doorX, doorY);
         ctx.scale(1 - t * 0.6, 1 - t * 0.6);
         ctx.translate(-doorX, -doorY);
-        this.player.draw(ctx, this.freddySheet);
+        this.player.draw(ctx, this.sheets[this.character], this.carSheet);
         ctx.restore();
     }
 
