@@ -4,6 +4,7 @@ const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
 const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
 const BACKGROUNDS = ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'];
 const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -99,30 +100,27 @@ class Game {
         this.drawLoading(0);
         try {
             const sources = await this.assetSources();
-            const total = Object.keys(sources).length;
+            this.sources = sources;
+            this.sheets = {};
+            this.portraits = {};
+            this.sheetLoads = {};
+            // Al arrancar solo Freddy (decorado y menú), el elegido y un rival: las diez hojas son ~25 MB
+            // y en móvil retrasaban mucho el menú. El resto se baja después, de una en una (loadOtherSheets).
+            const others = Object.keys(CHARACTERS).filter(id => id !== 'freddy' && id !== this.character);
+            const first = new Set(['freddy', this.character, others[Math.floor(Math.random() * others.length)]]);
+            const total = BACKGROUNDS.length + first.size + 2;
             let loaded = 0;
             const done = () => this.drawLoading(++loaded / total);
-            // Las hojas nuevas van apretadas (keepLargest quita trozos de frames vecinos) y no tienen verdes
-            // propios: el que queda entre brazo y cuerpo es fondo (seeThrough)
-            this.sheets = {};
-            for (const [id, c] of Object.entries(CHARACTERS)) {
-                const extra = id !== 'freddy';
-                this.sheets[id] = new SpriteSheet(sources[id], c.frames, { keepLargest: extra, seeThrough: extra });
-            }
-            this.freddySheet = this.sheets.freddy;
             // El coche no tiene verdes propios: el que asoma por el parabrisas y las ruedas es fondo
             this.carSheet = new SpriteSheet(sources.dani_car, DANI_CAR_FRAMES, { seeThrough: true });
             this.enemySheet = new SpriteSheet(sources.enemies, ENEMY_FRAMES);
             await Promise.all([
                 ...BACKGROUNDS.map(name => loadImage(sources[name]).then(img => { this.backgrounds[name] = img; done(); })),
-                ...Object.values(this.sheets).map(sheet => sheet.load().then(done)),
+                ...[...first].map(id => this.loadSheet(id).then(done)),
                 this.carSheet.load().then(done),
                 this.enemySheet.load().then(done),
             ]);
-            this.portraits = {};
-            for (const id of Object.keys(CHARACTERS)) {
-                this.portraits[id] = this.sheets[id].frames.idle[0].canvas.toDataURL();
-            }
+            this.freddySheet = this.sheets.freddy;
         } catch (e) {
             console.error('Failed to load assets', e);
             this.ctx.fillText('Error cargando los sprites', 480, 420);
@@ -134,9 +132,33 @@ class Game {
 
         this.initMenuParticles();
         this.showMenu();
+        this.loadOtherSheets();
         this.lastTime = performance.now();
         this.accumulator = 0;
         requestAnimationFrame(t => this.gameLoop(t));
+    }
+
+    // Carga (una sola vez) la hoja de un personaje y su retrato para la pantalla de selección.
+    loadSheet(id) {
+        if (!this.sheetLoads[id]) {
+            // Las hojas nuevas van apretadas (keepLargest quita trozos de frames vecinos) y no tienen verdes
+            // propios: el que queda entre brazo y cuerpo es fondo (seeThrough)
+            const extra = id !== 'freddy';
+            const sheet = new SpriteSheet(this.sources[id], CHARACTERS[id].frames, { keepLargest: extra, seeThrough: extra });
+            this.sheetLoads[id] = sheet.load().then(() => {
+                this.sheets[id] = sheet;
+                this.portraits[id] = sheet.frames.idle[0].canvas.toDataURL();
+                if (this.state === 'select') this.newGame(this.pendingLevel.index); // aparece su retrato
+            });
+        }
+        return this.sheetLoads[id];
+    }
+
+    // De una en una para no competir con la partida; si alguna falla, sigue con las demás.
+    async loadOtherSheets() {
+        for (const id of Object.keys(CHARACTERS)) {
+            await this.loadSheet(id).catch(e => console.error('Failed to load', id, e));
+        }
     }
 
     // Por http se cargan los ficheros sueltos (en paralelo y cacheables). Con file:// el
@@ -334,7 +356,7 @@ class Game {
             text: `${chosen.name}: ${chosen.desc}` + (IS_TOUCH ? '' : ' · ◀ ▶ y ENTER para elegir'),
             buttons: Object.entries(CHARACTERS).map(([id, c]) => ({
                 label: c.name,
-                img: this.portraits[id],
+                img: this.portraits[id] || BLANK_IMG, // hoja aún sin llegar: hueco del mismo alto
                 secondary: id !== this.character,
                 action: () => this.selectCharacter(id),
             })),
@@ -348,11 +370,15 @@ class Game {
     selectCharacter(id) {
         this.progress.settings.character = id;
         this.progress.save();
-        this.showStory(this.pendingLevel.index, { lives: this.progress.difficulty.lives });
+        // Si su hoja aún no ha llegado, se espera en la selección
+        this.loadSheet(id).then(() => {
+            if (this.state === 'select') this.showStory(this.pendingLevel.index, { lives: this.progress.difficulty.lives });
+        });
     }
 
     randomRival() {
-        const ids = Object.keys(CHARACTERS).filter(id => id !== this.character);
+        // Solo entre las hojas ya cargadas (al arrancar se carga al menos un rival)
+        const ids = Object.keys(this.sheets).filter(id => id !== this.character);
         return ids[Math.floor(Math.random() * ids.length)];
     }
 
