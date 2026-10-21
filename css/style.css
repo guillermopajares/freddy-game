@@ -405,6 +405,14 @@ body::before {
     filter: brightness(1.15);
 }
 
+/* Elemento elegido con el teclado/mando */
+#overlay-content .selected {
+    outline: 2px solid #ffd700;
+    outline-offset: 3px;
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.7);
+    border-radius: 6px;
+}
+
 #name-entry {
     margin: 0 0 12px;
     display: flex;

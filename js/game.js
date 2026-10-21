@@ -64,6 +64,8 @@ class Game {
         this.levelTime = 0;
         this.exitTimer = 0;
         this.pendingLevel = null; // { index, stats } mientras se muestra la historia
+        this.selected = null;     // elemento del overlay elegido con el teclado
+        this.spaceLock = false;   // Espacio sigue pulsado desde el menú: no debe lanzar papel
 
         const $ = id => document.getElementById(id);
         this.overlay = $('overlay');
@@ -88,6 +90,12 @@ class Game {
             this.renderRanking();
             document.getElementById('ranking').open = true;
         });
+        // Esc suelta el campo del nombre para seguir navegando sin guardar
+        this.nameInput.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape') this.nameInput.blur();
+        });
+        // Sin foco al hacer clic: si no, InputHandler ignoraría las flechas
+        this.panels.querySelectorAll('summary').forEach(s => s.addEventListener('pointerdown', e => e.preventDefault()));
 
         // Cambiar de pestaña o ventana pausa el juego
         window.addEventListener('blur', () => {
@@ -261,6 +269,83 @@ class Game {
             btn.addEventListener('click', action);
             return btn;
         }));
+        this.select(this.overlayButtons.firstElementChild);
+    }
+
+    // --- Navegación del overlay con teclado ------------------------------------------
+
+    // Lo elegible, en orden de pantalla; se recalcula porque abrir un panel añade sus controles.
+    menuItems() {
+        const items = this.nameEntry.hidden ? [] : [this.nameInput];
+        items.push(...this.overlayButtons.children);
+        if (!this.panels.hidden) {
+            this.panels.querySelectorAll('details').forEach(d => {
+                items.push(d.querySelector('summary'));
+                if (d.open) items.push(...d.querySelectorAll('input, select'));
+            });
+        }
+        return items.filter(el => !el.disabled);
+    }
+
+    select(el) {
+        if (this.selected) this.selected.classList.remove('selected');
+        this.selected = el || null;
+        if (!el || IS_TOUCH) return;
+        el.classList.add('selected');
+        // Sin barra de scroll, la selección no debe perderse; un panel abierto se muestra entero
+        const box = el.tagName === 'SUMMARY' && el.parentElement.open ? el.parentElement : el;
+        box.scrollIntoView({ block: 'nearest' });
+    }
+
+    moveSelection(step) {
+        const items = this.menuItems();
+        const i = items.indexOf(this.selected);
+        this.select(items[Math.max(0, Math.min(items.length - 1, i + step))]);
+    }
+
+    // ←/→: ajusta volumen y dificultad; en el resto pasa al vecino (botones en fila).
+    adjustSelection(dir) {
+        const el = this.selected;
+        if (el && el.type === 'range') {
+            el.value = Number(el.value) + dir * Number(el.step);
+            el.dispatchEvent(new Event('input'));
+        } else if (el && el.tagName === 'SELECT') {
+            el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + dir));
+            el.dispatchEvent(new Event('change'));
+        } else if (!el || el.type !== 'checkbox') {
+            this.moveSelection(dir);
+        }
+    }
+
+    activateSelection() {
+        const el = this.selected;
+        if (!el || !this.menuItems().includes(el)) return;
+        if (el === this.nameInput) el.focus();
+        else if (el.tagName === 'BUTTON' || el.tagName === 'SUMMARY' || el.type === 'checkbox') el.click();
+        if (el.tagName === 'SUMMARY') this.select(el);
+    }
+
+    // Esc cierra el panel abierto; devuelve false si no había ninguno.
+    closePanel() {
+        const open = this.panels.hidden ? null : this.panels.querySelector('details[open]');
+        if (!open) return false;
+        const target = (this.selected && this.selected.closest('details[open]')) || open;
+        target.open = false;
+        this.select(target.querySelector('summary'));
+        return true;
+    }
+
+    handleMenuNav() {
+        const input = this.input;
+        const pressed = (...codes) => codes.some(c => input.isPressed(c));
+        if (pressed('ArrowUp', 'KeyW')) this.moveSelection(-1);
+        if (pressed('ArrowDown', 'KeyS')) this.moveSelection(1);
+        if (pressed('ArrowLeft', 'KeyA')) this.adjustSelection(-1);
+        if (pressed('ArrowRight', 'KeyD')) this.adjustSelection(1);
+        if (pressed('Space', 'Enter')) {
+            this.spaceLock = input.isPressed('Space');
+            this.activateSelection();
+        }
     }
 
     hideOverlay() {
@@ -287,7 +372,7 @@ class Game {
         this.showOverlay({
             title: 'FREDDY GAME',
             subtitle: 'Desatasca el código',
-            text: IS_TOUCH ? 'Toca Jugar para empezar' : `Pulsa ENTER para empezar${playable > 1 ? ` · 1-${playable}: elegir nivel` : ''}`,
+            text: IS_TOUCH ? 'Toca Jugar para empezar' : `↑↓ elegir · ESPACIO aceptar${playable > 1 ? ` · 1-${playable}: nivel` : ''}`,
             score: highScore ? `Récord: ${highScore}` : '',
             buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons],
             panels: true,
@@ -362,7 +447,7 @@ class Game {
         this.showOverlay({
             titleClass: 'level-complete-title',
             title: '¡NIVEL SUPERADO!',
-            text: IS_TOUCH ? '' : 'Pulsa ENTER para seguir',
+            text: IS_TOUCH ? '' : 'ESPACIO o ENTER para seguir',
             score: `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(best.time)})`,
             buttons: [{ label: 'Siguiente', action: () => this.nextLevel() }],
         });
@@ -379,7 +464,7 @@ class Game {
         this.showOverlay({
             titleClass: 'game-over-title',
             title: 'GAME OVER',
-            text: IS_TOUCH ? '' : 'ENTER para volver al menú',
+            text: IS_TOUCH ? '' : '↑↓ elegir · ESPACIO aceptar',
             score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
             buttons: [
                 { label: 'Reintentar nivel', action: () => this.startLevel(this.currentLevel, { ...this.levelStartStats, lives: this.progress.difficulty.lives }) },
@@ -525,14 +610,9 @@ class Game {
 
     handleInput() {
         const input = this.input;
-        const typing = !this.nameEntry.hidden;
-        if (input.isPressed('Enter') && !typing) {
-            if (this.state === 'menu') this.newGame(0);
-            else if (this.state === 'story') this.startPendingLevel();
-            else if (this.state === 'levelComplete') this.nextLevel();
-            else if (this.state === 'paused') this.resume();
-            else if (this.state === 'gameOver' || this.state === 'victory') this.showMenu();
-        }
+        const typing = document.activeElement === this.nameInput;
+        const inMenu = !['loading', 'playing', 'exiting'].includes(this.state);
+        if (inMenu && !typing) this.handleMenuNav();
 
         if (this.state === 'menu') {
             for (let i = 1; i <= Math.min(this.progress.data.unlocked, levels.length); i++) {
@@ -541,6 +621,7 @@ class Game {
         }
 
         if (input.isPressed('Escape')) {
+            if (inMenu && !typing && this.closePanel()) return;
             if (this.state === 'playing') this.pause();
             else if (this.state === 'paused') this.resume();
         }
@@ -588,7 +669,13 @@ class Game {
         const player = this.player;
         level.update(this.levelTime);
         this.scenery.update(player, this.camX);
+        // El Espacio con el que se aceptó el menú no cuenta como disparo hasta soltarlo
+        if (this.spaceLock) this.input.justPressed.Space = false;
         player.update(this.input, level);
+        if (this.spaceLock) {
+            player.charge = 0;
+            if (!this.input.isDown('Space')) this.spaceLock = false;
+        }
         if (player.landed) {
             this.spawnDust(player.x + player.width / 2, player.y + player.height);
             Sound.play('land');
