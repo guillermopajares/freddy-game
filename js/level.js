@@ -55,8 +55,9 @@ class Level {
     draw(ctx, scenery, sheet, exitOpen, camX) {
         scenery.drawPlatforms(ctx, this.platforms, camX);
 
+        // Se apoya en el borde delantero de la superficie (los pies van en su mitad) para que no flote.
         this.hazards.forEach(h => {
-            sheet.draw(ctx, 'mound', 0, h.x + h.width / 2, h.y + 30, h.width / 318);
+            sheet.draw(ctx, 'mound', 0, h.x + h.width / 2, h.y + 30 + TOP_FRONT, h.width / 318);
         });
 
         this.checkpoints.forEach(c => this.drawCheckpoint(ctx, c));
