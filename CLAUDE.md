@@ -79,6 +79,11 @@ Detalles clave:
   no mueve a Freddy. Los botones del overlay hacen `preventDefault` en `pointerdown` para no quedarse con el foco
   (si no, Enter activa el botón y el juego a la vez).
 - **`setPointerCapture` lanza con punteros sintéticos**; va en `try` tras marcar la tecla.
+- **Resolución del canvas:** `Game.resize` le da tantos píxeles como se ven (escala CSS × `devicePixelRatio`,
+  tope 2x) y dibuja con `setTransform`; si se deja en 960×720 el escalado CSS lo pixela.
+  No volver a `imageSmoothingQuality = 'high'` (a 2x hundía los fps) ni a `image-rendering: pixelated`.
+- **Medir rendimiento sin `getImageData`:** leer píxeles del canvas hace que Chrome lo pase a modo software
+  y falsea la medida (y ralentiza la pestaña hasta recargar).
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
 
 ## Depurar en el navegador

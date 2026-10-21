@@ -32,9 +32,7 @@ class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        this.canvas.width = 960;
-        this.canvas.height = 720;
-        this.ctx.imageSmoothingQuality = 'high';
+        this.resize(1);
 
         this.input = new InputHandler();
         this.backgrounds = {};
@@ -143,6 +141,7 @@ class Game {
 
     drawLoading(fraction) {
         const ctx = this.ctx;
+        ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
         ctx.fillStyle = '#0f0c29';
         ctx.fillRect(0, 0, 960, 720);
         ctx.fillStyle = '#fff';
@@ -953,8 +952,21 @@ class Game {
 
     // --- Dibujo ------------------------------------------------------------------
 
+    // El lienzo lógico es siempre 960x720, pero el canvas tiene tantos píxeles como se ven en
+    // pantalla (escala CSS × devicePixelRatio). Si no, el navegador amplía 960x720 y se pixela.
+    resize(cssScale) {
+        // ponytail: tope 2x de resolución interna; a 3x hay que rellenar más del doble de píxeles y baja de 60 fps
+        this.pixelRatio = Math.min(2, cssScale * (window.devicePixelRatio || 1));
+        this.canvas.width = Math.round(960 * this.pixelRatio);
+        this.canvas.height = Math.round(720 * this.pixelRatio);
+        // 'high' (filtrado bicúbico) cuesta mucho a esta resolución: a 2x bajaba a 24 fps. 'medium' se ve igual.
+        // Cambiar el tamaño del canvas reinicia el estado del contexto, por eso se fija aquí.
+        this.ctx.imageSmoothingQuality = 'medium';
+    }
+
     draw() {
         const ctx = this.ctx;
+        ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
         ctx.save();
         ctx.translate(this.screenShake.x, this.screenShake.y);
         ctx.clearRect(-10, -10, 980, 740);
