@@ -3,6 +3,9 @@ const PROJECTILE_TYPES = {
     paperBig: { width: 44, height: 44, speed: 10, lifetime: 120, damage: 3, gravity: 0, pierce: true },
     pixel: { width: 18, height: 18, speed: 4.5, lifetime: 240, damage: 1, gravity: 0, pierce: false },
     goo: { width: 22, height: 22, speed: 5, lifetime: 240, damage: 1, gravity: 0.22, pierce: false },
+    // Emojis malignos del Glitch: lentos y ondulantes; los rojos (segunda fase), más rápidos
+    emoji: { width: 30, height: 30, speed: 3.2, lifetime: 300, damage: 1, gravity: 0, pierce: false },
+    emojiRed: { width: 30, height: 30, speed: 4.4, lifetime: 260, damage: 1, gravity: 0, pierce: false },
 };
 
 class Projectile {
@@ -27,6 +30,7 @@ class Projectile {
         this.rotation = 0;
         this.trail = [];
         this.hits = new Set(); // enemigos ya atravesados (rollo cargado)
+        this.sprite = type === 'emoji' || type === 'emojiRed'; // de la hoja de objetos, sin girar
     }
 
     update() {
@@ -41,6 +45,7 @@ class Projectile {
         this.velocityY += this.gravity;
         this.x += this.velocityX;
         this.y += this.velocityY;
+        if (this.sprite) this.y += Math.sin(this.lifetime * 0.15) * 1.2;
         this.lifetime--;
 
         if (this.lifetime <= 0 || this.y > 760) {
@@ -48,7 +53,14 @@ class Projectile {
         }
     }
 
-    draw(ctx) {
+    // sheet: hoja de objetos, para los emojis.
+    draw(ctx, sheet) {
+        if (this.sprite) {
+            if (!sheet) return;
+            const frame = Math.floor(this.lifetime / 8);
+            sheet.draw(ctx, this.type, frame, this.x + this.width / 2, this.y + this.height + 3, 0.55);
+            return;
+        }
         if (this.type === 'paper' || this.type === 'paperBig') this.drawPaperTrail(ctx);
 
         ctx.save();

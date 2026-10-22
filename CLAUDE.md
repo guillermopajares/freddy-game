@@ -24,9 +24,9 @@ Scripts clásicos cargados en orden desde `index.html`; todo son globales (`clas
 | Fichero | Qué hace |
 |---|---|
 | `js/asset-files.js` | Rutas de imágenes (`ASSET_FILES`) |
-| `js/assets.js` | **~50 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
+| `js/assets.js` | **~60 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
 | `js/sprite.js` | Coordenadas de frames de las hojas, chroma key, `SpriteSheet` |
-| `js/characters.js` | Frames de los personajes elegibles y del coche de Dani; `CHARACTERS` (escala y stats de cada uno) |
+| `js/characters.js` | Frames de los personajes elegibles y del coche de Dani; `CHARACTERS` (escala, stats y ulti de cada uno) |
 | `js/input.js` | Teclado + mando + botones táctiles → acciones (`BINDINGS`: `jump`, `fire`, `melee`, `dash`...) |
 | `js/sound.js` | Efectos y música sintetizados con Web Audio (sin ficheros de audio) |
 | `js/collision.js` | AABB y resolución contra plataformas |
@@ -65,7 +65,7 @@ Detalles clave:
 
 ## Trampas conocidas (aprendidas a base de errores)
 
-- **`js/assets.js` pesa ~50 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
+- **`js/assets.js` pesa ~60 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
   Para cambiar imágenes: editar `assets/` y `js/asset-files.js`, luego `node tools/build-assets.js`.
 - **`file://` no permite `getImageData` sobre imágenes sueltas** (canvas "tainted"); por eso existe la versión
   embebida. Por http se cargan los ficheros. Probar siempre por http.
@@ -98,6 +98,12 @@ Detalles clave:
 - **Nuevo personaje:** hoja en `art/` → copiarla a `assets/<id>.jpg`, entrada en `ASSET_FILES`, frames y entrada en
   `CHARACTERS` (`js/characters.js`), `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
   el salto de cada personaje que llega a todo. La selección muestra cinco por fila (`button.character`).
+- **Ulti:** un personaje con `ultimate` en `CHARACTERS` (hoy Dani → Spider Dani) llena una barra matando enemigos y
+  cogiendo monedas/estrellas; con ella llena, `ultimate` (I/V, Y del mando, botón ⚡) lo transforma `ULT_TIME` frames.
+  `Player.form` = personaje con la ulti encima: leer de ahí `punch/reach/car/dash`, no de `character`. La hoja de la
+  ulti va en `game.ultSheets` (no en `sheets`: no es elegible ni rival). Para dar ulti a otro, hoja nueva + entrada.
+- **Hoja de objetos (`assets/elements.jpg`, `ITEM_FRAMES`):** fuego intermitente (`fires` del nivel), veneno (quita
+  vida), poción turbo, portátil (vida extra hasta 9) y los emojis que dispara el Glitch 404. Va a media resolución.
 - **Mueble de recreativa:** `main.js` (`fit`) pone `data-cabinet="full|compact|off"` en `<html>` según el ajuste
   `cabinet` y el tamaño de la ventana (táctil: siempre `off`), y `no-crt` si se quita el efecto del cristal. Cada modo
   tiene su tamaño lógico en `SIZES`; si se añade algo al mueble que cambie su alto, actualizarlo ahí.
@@ -122,7 +128,7 @@ Detalles clave:
 - **Nuevo enemigo/jefe:** subclase en `js/enemy.js` (`think(player, level, game)`), registrarla en `ENEMY_TYPES`,
   frames en `ENEMY_FRAMES` si hace falta. Jefes: `isBoss`, `name`, `achievement`, `phase`; aparecen con
   `boss: { type, x, y, arenaX }` en el nivel. Ver `docs/sprites.md` para recortar frames nuevos.
-- **Nuevo objeto:** tipo en `collectible.js` (dibujo y `value`) + efecto en `Game.handleCollectibles`.
+- **Nuevo objeto:** tipo en `collectible.js` (dibujo o entrada en `ITEM_SPRITES` y `value`) + efecto en `Game.handleCollectibles`.
   Solo `coin/star/heart` cuentan para las estrellas del nivel (`STAR_TYPES`).
 - **Nuevo logro:** entrada en `ACHIEVEMENTS` (`js/progress.js`) + `game.unlockAchievement(id)` donde ocurra.
 - **Nuevo sonido:** `case` en `Sound.play` (`js/sound.js`), sintetizado con `tone`/`noise`.

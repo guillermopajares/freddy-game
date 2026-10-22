@@ -7,6 +7,8 @@ const RAM_TIME = 40; // la embestida en coche dura más que el dash y hace daño
 const COYOTE_TIME = 6; // frames tras salir de un borde en los que aún se puede saltar
 const JUMP_BUFFER = 8; // frames que se recuerda un salto pulsado justo antes de aterrizar
 const JUMP_CUT = -4; // soltar el salto mientras sube lo corta: salto corto
+const ULT_MAX = 100; // barra de la ulti: se llena matando enemigos y recogiendo monedas y estrellas
+const ULT_TIME = 600; // 10 s transformado
 
 class Player {
     // stats.character: entrada de CHARACTERS (sin ella, Freddy).
@@ -32,7 +34,7 @@ class Player {
         this.score = stats.score ?? 0;
         this.ammo = stats.ammo ?? 10;
         this.maxAmmo = 20;
-        this.powers = { triple: 0, gold: 0 };
+        this.powers = { triple: 0, gold: 0, turbo: 0 };
         this.shield = false;
 
         this.invincibleTimer = 0;
@@ -42,8 +44,11 @@ class Player {
         this.dashSpeed = 9;
         this.wallJumpLockout = 0;
         this.touchingWall = 0;
-        this.maxJumps = 2;
-        this.jumpsLeft = 2;
+        this.maxJumps = this.character.jumps ?? 2;
+        this.jumpsLeft = this.maxJumps;
+        this.ultimate = 0; // carga de la barra (0-ULT_MAX); solo si el personaje tiene ulti
+        this.ultTimer = 0;
+        this.transformed = false; // se ha transformado este frame (el juego pone el efecto)
         this.coyote = 0;
         this.jumpBuffer = 0;
         this.jumpHeld = false; // salto iniciado por el jugador que aún se puede cortar
@@ -70,13 +75,30 @@ class Player {
         return this.action && (this.action.name === 'hurt' || this.action.name === 'downed');
     }
 
+    // Personaje con la ulti aplicada encima mientras dura.
+    get form() {
+        return this.ultTimer > 0 ? { ...this.character, ...this.character.ultimate } : this.character;
+    }
+
     get meleeDamage() {
-        return (this.powers.gold > 0 ? 3 : 2) + (this.character.punch || 0);
+        return (this.powers.gold > 0 ? 3 : 2) + (this.form.punch || 0);
     }
 
     // Dani: su dash es una embestida en coche que daña a lo que atropella.
     get ramming() {
-        return this.character.car && this.dashTimer > 0;
+        return this.form.car && this.dashTimer > 0;
+    }
+
+    addUltimate(amount) {
+        if (this.character.ultimate && this.ultTimer === 0) this.ultimate = Math.min(ULT_MAX, this.ultimate + amount);
+    }
+
+    // Velocidad, salto y saltos en el aire del personaje (o de su ulti).
+    applyForm() {
+        const f = this.form;
+        this.speed = f.speed ?? 3.5;
+        this.jumpForce = f.jumpForce ?? -12;
+        this.maxJumps = f.jumps ?? 2;
     }
 
     update(input, level) {
@@ -86,6 +108,9 @@ class Player {
         if (this.dashCooldown > 0) this.dashCooldown--;
         if (this.powers.triple > 0) this.powers.triple--;
         if (this.powers.gold > 0) this.powers.gold--;
+        if (this.powers.turbo > 0) this.powers.turbo--;
+        if (this.ultTimer > 0 && --this.ultTimer === 0) this.applyForm();
+        this.transformed = false;
         if (this.action && --this.action.timer <= 0) this.action = null;
 
         if (this.dead) {
@@ -145,9 +170,18 @@ class Player {
             this.crouching = crouch;
         }
 
+        if (input.isPressed('ultimate') && this.ultimate >= ULT_MAX && !stunned) {
+            this.ultimate = 0;
+            this.ultTimer = ULT_TIME;
+            this.transformed = true;
+            this.applyForm();
+            Sound.play('ultimate');
+        }
+
+        const car = this.form.car;
         if (input.isPressed('dash') && this.dashCooldown === 0 && !crouch && !stunned) {
-            this.dashTimer = this.character.car ? RAM_TIME : 14;
-            this.dashCooldown = this.character.car ? 90 : 50;
+            this.dashTimer = car ? RAM_TIME : this.form.dash ? 22 : 14;
+            this.dashCooldown = car ? 90 : this.form.dash ? 36 : 50;
             this.meleeHits.clear();
             Sound.play('dash');
         }
@@ -155,7 +189,7 @@ class Player {
         if (this.dashTimer > 0) {
             this.dashTimer--;
             this.velocityX = this.dashSpeed * this.facing;
-            if (!this.character.car) this.velocityY = 0; // el coche no vuela: cae por los huecos
+            if (!car) this.velocityY = 0; // el coche no vuela: cae por los huecos
         } else if (stunned) {
             this.velocityX *= 0.92;
         } else if (this.wallJumpLockout > 0) {
@@ -163,6 +197,7 @@ class Player {
         } else {
             const dir = (right ? 1 : 0) - (left ? 1 : 0);
             let speed = this.charge > 0 ? this.speed * 0.6 : this.speed;
+            if (this.powers.turbo > 0) speed *= 1.3;
             if (crouch) speed *= 0.5; // andar agachado
             if (dir) {
                 this.velocityX = dir * speed;
@@ -186,9 +221,10 @@ class Player {
         // se pulsa justo antes de aterrizar (buffer). Soltarlo mientras sube da un salto corto.
         this.coyote = this.onGround ? COYOTE_TIME : Math.max(0, this.coyote - 1);
         const jumpPressed = input.isPressed('jump');
+        const jumpForce = this.powers.turbo > 0 ? this.jumpForce * 1.12 : this.jumpForce;
         this.jumpBuffer = jumpPressed ? JUMP_BUFFER : Math.max(0, this.jumpBuffer - 1);
         if (this.jumpBuffer > 0 && this.coyote > 0) {
-            this.velocityY = this.jumpForce;
+            this.velocityY = jumpForce;
             this.onGround = false;
             this.coyote = 0;
             this.jumpBuffer = 0;
@@ -196,7 +232,7 @@ class Player {
             this.jumpHeld = true;
             Sound.play('jump');
         } else if (jumpPressed && this.touchingWall !== 0) {
-            this.velocityY = this.jumpForce * 0.9;
+            this.velocityY = jumpForce * 0.9;
             this.velocityX = -this.touchingWall * this.speed * 1.5;
             this.wallJumpLockout = 15;
             this.facing = -this.touchingWall;
@@ -205,7 +241,7 @@ class Player {
             this.jumpHeld = true;
             Sound.play('jump');
         } else if (jumpPressed && this.jumpsLeft > 0) {
-            this.velocityY = this.jumpForce * 0.8;
+            this.velocityY = jumpForce * 0.8;
             this.jumpsLeft--;
             this.jumpBuffer = 0;
             this.jumpHeld = true;
@@ -258,7 +294,7 @@ class Player {
         if (!this.action || this.action.name !== 'melee') return null;
         const progress = 1 - this.action.timer / this.action.duration;
         if (progress < 0.25 || progress > 0.85) return null;
-        const reach = (this.powers.gold > 0 ? 110 : 75) + (this.character.reach || 0);
+        const reach = (this.powers.gold > 0 ? 110 : 75) + (this.form.reach || 0);
         return {
             x: this.facing === 1 ? this.x + this.width - 5 : this.x - reach + 5,
             y: this.y + 20,
@@ -312,7 +348,7 @@ class Player {
     // carSheet: hoja del coche de Dani (solo se usa mientras embiste).
     draw(ctx, sheet, carSheet) {
         this.projectiles.forEach(p => p.draw(ctx));
-        const scale = this.character.scale || PLAYER_SCALE;
+        const scale = this.form.scale || PLAYER_SCALE;
 
         const name = this.getAnimation();
         const count = sheet.count(name) || 1;
@@ -346,6 +382,10 @@ class Player {
         if (this.powers.gold > 0 && name === 'melee') {
             ctx.shadowColor = '#ffd700';
             ctx.shadowBlur = 18;
+        } else if (this.ultTimer > 0) {
+            // Aura de la ulti; parpadea los dos últimos segundos para avisar de que se acaba
+            ctx.shadowColor = this.ultTimer > 120 || Math.floor(this.ultTimer / 6) % 2 ? '#e53935' : '#1e88e5';
+            ctx.shadowBlur = 16;
         }
         sheet.draw(ctx, name, frame, cx, bottom, scale, this.facing);
         ctx.restore();
@@ -387,4 +427,7 @@ class Player {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = Player;
+if (typeof module !== 'undefined') {
+    module.exports = Player;
+    module.exports.ULT_MAX = ULT_MAX;
+}

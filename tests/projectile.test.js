@@ -1,6 +1,16 @@
 const Projectile = require('../js/projectile');
 
 describe('Projectile', () => {
+    it('los emojis del Glitch son de la hoja de objetos, no giran y ondulan', () => {
+        const p = new Projectile(100, 200, 1, 'emoji');
+        expect(p.sprite).toBe(true);
+        expect(p.speed).toBeLessThan(new Projectile(0, 0, 1, 'emojiRed').speed);
+        const ys = [];
+        for (let i = 0; i < 20; i++) { p.update(); ys.push(p.y); }
+        expect(new Set(ys.map(Math.round)).size).toBeGreaterThan(1);
+        expect(p.x).toBeCloseTo(100 + 20 * p.speed);
+    });
+
     describe('constructor', () => {
         it('should initialize correctly with default type "paper"', () => {
             const x = 100;

@@ -118,17 +118,20 @@ class Game {
             // y en móvil retrasaban mucho el menú. El resto se baja después, de una en una (loadOtherSheets).
             const others = Object.keys(CHARACTERS).filter(id => id !== 'freddy' && id !== this.character);
             const first = new Set(['freddy', this.character, others[Math.floor(Math.random() * others.length)]]);
-            const total = BACKGROUNDS.length + first.size + 2;
+            const total = BACKGROUNDS.length + first.size + 3;
             let loaded = 0;
             const done = () => this.drawLoading(++loaded / total);
             // El coche no tiene verdes propios: el que asoma por el parabrisas y las ruedas es fondo
             this.carSheet = new SpriteSheet(sources.dani_car, DANI_CAR_FRAMES, { seeThrough: true });
             this.enemySheet = new SpriteSheet(sources.enemies, ENEMY_FRAMES);
+            this.itemSheet = new SpriteSheet(sources.elements, ITEM_FRAMES);
+            this.ultSheets = {};
             await Promise.all([
                 ...BACKGROUNDS.map(name => loadImage(sources[name]).then(img => { this.backgrounds[name] = img; done(); })),
                 ...[...first].map(id => this.loadSheet(id).then(done)),
                 this.carSheet.load().then(done),
                 this.enemySheet.load().then(done),
+                this.itemSheet.load().then(done),
             ]);
             this.freddySheet = this.sheets.freddy;
         } catch (e) {
@@ -162,6 +165,15 @@ class Game {
             });
         }
         return this.sheetLoads[id];
+    }
+
+    // Hoja de la transformación (ulti). Aparte de this.sheets: no es un personaje elegible ni rival.
+    loadUltimate(u) {
+        if (!this.sheetLoads[u.sheet]) {
+            const sheet = new SpriteSheet(this.sources[u.sheet], u.frames, { keepLargest: true, seeThrough: true });
+            this.sheetLoads[u.sheet] = sheet.load().then(() => { this.ultSheets[u.sheet] = sheet; });
+        }
+        return this.sheetLoads[u.sheet];
     }
 
     // De una en una para no competir con la partida; si alguna falla, sigue con las demás.
@@ -734,6 +746,10 @@ class Game {
         this.scenery.setLevel(this.level);
         this.levelTime = 0;
         this.player = new Player(this.level.spawnX, this.level.spawnY, { ...stats, character: CHARACTERS[this.character] });
+        const ult = CHARACTERS[this.character].ultimate;
+        if (ult) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
+        document.getElementById('ult').hidden = !ult;
+        document.getElementById('touch-ultimate').hidden = !ult;
         this.levelStartStats = { ...stats };
         this.camX = 0;
         this.fade = 1;
@@ -860,6 +876,15 @@ class Game {
             this.spawnDust(player.x + player.width / 2, player.y + player.height);
             Sound.play('land');
         }
+        if (player.transformed) {
+            const cx = player.x + player.width / 2;
+            const cy = player.y + player.height / 2;
+            this.spawnParticles(cx, cy, '#e53935', 24, 16);
+            this.spawnParticles(cx, cy, '#1e88e5', 24, 16);
+            this.announce(`¡${player.character.ultimate.name}!`);
+            this.triggerScreenShake(10);
+            this.triggerFlash();
+        }
         this.enemies.forEach(e => e.update(player, level, this));
         this.enemyProjectiles.forEach(p => p.update());
         this.collectibles.forEach(c => c.update());
@@ -963,6 +988,7 @@ class Game {
         }
 
         Sound.play('kill');
+        this.player.addUltimate(enemy.isBoss ? 40 : 20);
         this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
         this.comboTimer = 180;
         if (this.combo >= 5) this.unlockAchievement('combo5');
@@ -1079,6 +1105,15 @@ class Game {
             }
         });
 
+        this.level.fires.forEach(f => {
+            const fire = this.level.fireBounds(f);
+            if (fire && Collision.aabb(bounds, fire) && player.takeDamage(1, f.x)) {
+                player.velocityY = -10;
+                this.spawnParticles(f.x, f.y - 30, '#ff9800', 14);
+                this.triggerScreenShake(6);
+            }
+        });
+
         this.level.hazards.forEach(h => {
             if (Collision.aabb(bounds, this.level.hazardBounds(h))) {
                 if (player.takeDamage(1, h.x + h.width / 2)) {
@@ -1094,12 +1129,31 @@ class Game {
         const player = this.player;
         this.collectibles.forEach(c => {
             if (c.collected || !Collision.aabb(player.getBounds(), c.getBounds())) return;
+            if (c.type === 'poison') {
+                // Veneno: se rompe al tocarlo y quita una vida (salvo invulnerable o con escudo)
+                c.collected = true;
+                this.spawnParticles(c.x + c.width / 2, c.y + c.height / 2, '#7bd03a', 16);
+                this.spawnText(c.x, c.y, '¡VENENO!');
+                this.hurtPlayer(c.x + c.width / 2);
+                return;
+            }
             c.collected = true;
             player.score += c.value;
+            if (c.type === 'coin') player.addUltimate(5);
+            if (c.type === 'star') player.addUltimate(10);
             if (STAR_TYPES.has(c.type) && !c.dropped) this.collectedCount++;
 
             if (c.type === 'heart' && player.lives < 5) player.lives++;
-            if (c.type === 'paper') {
+            if (c.type === 'laptop') {
+                // Vida extra: puede pasar del tope de los corazones
+                player.lives = Math.min(9, player.lives + 1);
+                this.spawnText(c.x, c.y, '+1 VIDA 💻');
+                Sound.play('power');
+            } else if (c.type === 'potion') {
+                player.powers.turbo = POWER_TIME;
+                this.spawnText(c.x, c.y, '¡POCIÓN TURBO!');
+                Sound.play('power');
+            } else if (c.type === 'paper') {
                 player.ammo = Math.min(player.maxAmmo, player.ammo + 5);
                 this.spawnText(c.x, c.y, '+5 🧻');
                 Sound.play('paper');
@@ -1233,7 +1287,16 @@ class Game {
             player.shield ? '🛡️' : '',
             player.powers.triple > 0 ? `🧻x3 ${Math.ceil(player.powers.triple / 60)}s` : '',
             player.powers.gold > 0 ? `🪠 ${Math.ceil(player.powers.gold / 60)}s` : '',
+            player.powers.turbo > 0 ? `🧪 ${Math.ceil(player.powers.turbo / 60)}s` : '',
         ].filter(Boolean).join(' ');
+        // Barra de la ulti: se llena con la carga y, transformado, se vacía con el tiempo que queda
+        if (player.character.ultimate) {
+            const ult = document.getElementById('ult');
+            const ready = player.ultimate >= ULT_MAX;
+            ult.style.setProperty('--ult', player.ultTimer > 0 ? player.ultTimer / ULT_TIME : player.ultimate / ULT_MAX);
+            ult.classList.toggle('ready', ready);
+            document.getElementById('touch-ultimate').classList.toggle('ready', ready);
+        }
         document.getElementById('lives').textContent = '❤️'.repeat(player.lives);
         document.getElementById('score').textContent = `Puntos: ${player.score}`;
         document.getElementById('ammo').textContent = `🧻 ${player.ammo}`;
@@ -1271,14 +1334,14 @@ class Game {
 
             ctx.save();
             ctx.translate(-camX, 0);
-            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, camX);
+            this.level.draw(ctx, this.scenery, this.freddySheet, this.exitOpen, camX, this.itemSheet);
             if (this.state !== 'gameOver' && this.state !== 'victory') {
                 const grounded = [...this.collectibles.filter(c => !c.collected), ...this.enemies];
                 if (!this.player.dead && this.state !== 'exiting') grounded.push(this.player);
                 this.scenery.drawShadows(ctx, grounded, this.level.platforms);
-                this.collectibles.forEach(c => c.draw(ctx));
+                this.collectibles.forEach(c => c.draw(ctx, this.itemSheet));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
-                this.enemyProjectiles.forEach(p => p.draw(ctx));
+                this.enemyProjectiles.forEach(p => p.draw(ctx, this.itemSheet));
                 this.drawPlayer(ctx);
             }
             if (this.flood && this.flood.started) this.drawFlood(ctx, camX);
@@ -1309,8 +1372,11 @@ class Game {
 
     // Al cruzar la puerta, Freddy encoge hacia el centro de la puerta y desaparece.
     drawPlayer(ctx) {
+        // Transformado: hoja de la ulti (si aún no ha llegado, la normal)
+        const ult = this.player.ultTimer > 0 && this.ultSheets[this.player.character.ultimate.sheet];
+        const sheet = ult || this.sheets[this.character];
         if (this.state !== 'exiting') {
-            this.player.draw(ctx, this.sheets[this.character], this.carSheet);
+            this.player.draw(ctx, sheet, this.carSheet);
             return;
         }
         const t = Math.min(1, this.exitTimer / 30);
@@ -1322,7 +1388,7 @@ class Game {
         ctx.translate(doorX, doorY);
         ctx.scale(1 - t * 0.6, 1 - t * 0.6);
         ctx.translate(-doorX, -doorY);
-        this.player.draw(ctx, this.sheets[this.character], this.carSheet);
+        this.player.draw(ctx, sheet, this.carSheet);
         ctx.restore();
     }
 

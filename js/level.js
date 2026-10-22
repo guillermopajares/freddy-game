@@ -1,9 +1,13 @@
 const GROUND_Y = 650;
+const FIRE_CYCLE = 200; // frames de un ciclo del fuego: encendido FIRE_ON, luego se apaga
+const FIRE_ON = 120;
+const FIRE_WARN = 40; // al final del apagado la brasa crece: aviso de que vuelve
 
 // Formato compacto de nivel (coordenadas de mundo; la pantalla mide 960x720):
 //   ground:       [x, ancho]                      suelo a GROUND_Y
 //   platforms:    [x, y, ancho, moveX?, speed?]   moveX/speed = plataforma móvil (amplitud px, rad/frame)
 //   hazards:      [x, yDeLaSuperficie, ancho]     montículos de caca
+//   fires:        [x, yDeLaSuperficie, desfase?]  llamas intermitentes (x = centro; desfase en frames)
 //   checkpoints:  [x, yDeLaSuperficie]
 //   enemies:      [tipo, x, y, { health, elite }]
 //   collectibles: [tipo, x, y]
@@ -24,6 +28,8 @@ class Level {
         ];
         this.platforms.forEach(p => { p.baseX = p.x; p.vx = 0; });
         this.hazards = (data.hazards || []).map(([x, top, width]) => ({ x, y: top - 30, width }));
+        this.fires = (data.fires || []).map(([x, top, phase = 0]) => ({ x, y: top, phase }));
+        this.time = 0;
         this.checkpoints = (data.checkpoints || []).map(([x, top]) => ({ x, y: top, reached: false }));
         this.enemies = data.enemies.map(([type, x, y, opts]) => ({ type, x, y, ...opts }));
         this.collectibles = data.collectibles.map(([type, x, y]) => ({ type, x, y }));
@@ -33,6 +39,7 @@ class Level {
     }
 
     update(time) {
+        this.time = time;
         this.platforms.forEach(p => {
             if (!p.moveX) return;
             const x = p.baseX + Math.sin(time * p.speed) * p.moveX;
@@ -45,6 +52,18 @@ class Level {
         this.platforms.forEach(p => { p.x = p.baseX; p.vx = 0; });
         this.checkpoints.forEach(c => { c.reached = false; });
         this.leftWall = 0;
+        this.time = 0;
+    }
+
+    // Momento del ciclo del fuego (0 = acaba de encenderse).
+    fireTime(f) {
+        return (this.time + f.phase) % FIRE_CYCLE;
+    }
+
+    // Solo quema encendido; la caja es el cuerpo de la llama, sin las puntas.
+    fireBounds(f) {
+        if (this.fireTime(f) >= FIRE_ON) return null;
+        return { x: f.x - 14, y: f.y - 52, width: 28, height: 52 };
     }
 
     // Hitbox de los montículos: solo la parte baja, para no castigar el roce.
@@ -52,8 +71,8 @@ class Level {
         return { x: h.x + 10, y: h.y + 12, width: h.width - 20, height: 18 };
     }
 
-    // Capa de mundo: se dibuja con la cámara ya aplicada.
-    draw(ctx, scenery, sheet, exitOpen, camX) {
+    // Capa de mundo: se dibuja con la cámara ya aplicada. itemSheet: hoja de objetos (fuego).
+    draw(ctx, scenery, sheet, exitOpen, camX, itemSheet) {
         scenery.drawPlatforms(ctx, this.platforms, camX);
 
         // Se apoya en el borde delantero de la superficie (los pies van en su mitad) para que no flote.
@@ -61,8 +80,26 @@ class Level {
             sheet.draw(ctx, 'mound', 0, h.x + h.width / 2, h.y + 30 + TOP_FRONT, h.width / 318);
         });
 
+        if (itemSheet) this.fires.forEach(f => this.drawFire(ctx, itemSheet, f));
+
         this.checkpoints.forEach(c => this.drawCheckpoint(ctx, c));
         scenery.drawExit(ctx, this.exitX, this.exitY, this.exitWidth, this.exitHeight, exitOpen);
+    }
+
+    // Encendida: llama animada de ~70 px. Apagada: brasa pequeña que crece justo antes de volver.
+    drawFire(ctx, sheet, f) {
+        const t = this.fireTime(f);
+        const frame = Math.floor((this.time + f.phase) / 5);
+        const bottom = f.y + TOP_FRONT;
+        if (t < FIRE_ON) {
+            sheet.draw(ctx, 'fire', frame, f.x, bottom, 0.72);
+            return;
+        }
+        const warn = Math.max(0, t - (FIRE_CYCLE - FIRE_WARN)) / FIRE_WARN;
+        ctx.save();
+        ctx.globalAlpha = 0.6 + warn * 0.4;
+        sheet.draw(ctx, 'fire', frame, f.x, bottom, 0.18 + warn * 0.22);
+        ctx.restore();
     }
 
     // Checkpoint: desatascador clavado con banderín (verde al activarlo).
@@ -101,6 +138,7 @@ const levels = [
             [2150, 540, 130], [2400, 450, 160], [2650, 540, 130],
         ],
         hazards: [[600, 650, 80], [1450, 650, 70]],
+        fires: [[1640, 650]],
         checkpoints: [[1000, 650], [1840, 650]],
         enemies: [
             ['CodeBug', 380, 570], ['CodeBug', 480, 400], ['CodeBug', 1050, 570],
@@ -109,6 +147,7 @@ const levels = [
         collectibles: [
             ['coin', 250, 510], ['coin', 500, 440], ['paper', 300, 610], ['shield', 960, 500],
             ['star', 1130, 400], ['coin', 1550, 480], ['star', 1720, 380], ['coin', 1350, 610],
+            ['potion', 1508, 480],
         ],
         // Otro personaje jugable, elegido al azar entre los que no lleva el jugador
         boss: { type: 'BossRival', x: 2600, y: 500, arenaX: 1920 },
@@ -129,6 +168,7 @@ const levels = [
             [2520, 540, 130], [2760, 450, 160], [3050, 540, 130], [2640, 340, 110], [2920, 340, 110],
         ],
         hazards: [[1150, 650, 70], [2150, 650, 70]],
+        fires: [[2310, 650, 60]],
         checkpoints: [[1050, 650], [2340, 650]],
         enemies: [
             ['CodeBug', 200, 570], ['CodeBug', 830, 340], ['Error404', 700, 200],
@@ -138,7 +178,7 @@ const levels = [
         collectibles: [
             ['coin', 480, 540], ['coin', 650, 460], ['paper', 650, 290], ['star', 870, 210],
             ['coin', 1380, 520], ['triple', 1590, 260], ['star', 1820, 340], ['coin', 1760, 520],
-            ['paper', 2050, 610], ['star', 1390, 340], ['heart', 2670, 300],
+            ['paper', 2050, 610], ['star', 1390, 340], ['heart', 2670, 300], ['poison', 2245, 610],
         ],
         boss: { type: 'BossBug', x: 3200, y: 480, arenaX: 2400, rivalChance: 0.5 },
     }),
@@ -157,6 +197,7 @@ const levels = [
             [2050, 540, 140], [2300, 450, 160], [2550, 540, 140], [2150, 340, 120], [2450, 340, 120], [2700, 450, 140],
         ],
         hazards: [[1350, 650, 60]],
+        fires: [[900, 650], [1750, 650, 100]],
         checkpoints: [[1200, 650], [1860, 650]],
         enemies: [
             ['CodeBug', 300, 570], ['Error404', 450, 300], ['CodeBug', 800, 570],
@@ -167,6 +208,7 @@ const levels = [
             ['coin', 280, 480], ['paper', 450, 360], ['star', 730, 280], ['coin', 780, 480],
             ['coin', 930, 380], ['gold', 1530, 290], ['coin', 1280, 500], ['paper', 1700, 610],
             ['heart', 1800, 610], ['star', 2180, 300], ['star', 2480, 300],
+            ['poison', 700, 610], ['laptop', 2740, 410],
         ],
         boss: { type: 'Boss404', x: 2350, y: 40, arenaX: 1920 },
     }),
@@ -199,7 +241,7 @@ const levels = [
             ['coin', 450, 560], ['paper', 830, 440], ['star', 850, 260], ['coin', 1180, 460],
             ['star', 1080, 210], ['paper', 1500, 610], ['coin', 1860, 440], ['star', 1930, 250],
             ['shield', 2240, 440], ['heart', 2560, 610], ['coin', 2700, 610], ['triple', 1350, 610],
-            ['star', 3290, 410],
+            ['star', 3290, 410], ['potion', 2405, 520],
         ],
         boss: { type: 'BossGlitch', x: 3400, y: 300, arenaX: 2880, rivalChance: 0.5 },
     }),
@@ -218,6 +260,7 @@ const levels = [
             [2000, 560, 110], [2770, 560, 110], [2280, 470, 160, 120, 0.015], [2120, 370, 100], [2660, 370, 100],
         ],
         hazards: [[300, 650, 70], [1300, 650, 60], [2200, 650, 70], [2590, 650, 70]],
+        fires: [[1500, 650], [1720, 650, 100]],
         checkpoints: [[1150, 650], [1860, 650]],
         enemies: [
             ['CodeBug', 200, 570, { elite: true }], ['Error404', 520, 380], ['CodeBug', 750, 420],
@@ -228,6 +271,7 @@ const levels = [
             ['coin', 490, 540], ['paper', 730, 460], ['star', 1380, 260], ['gold', 1230, 480],
             ['coin', 1430, 400], ['star', 1730, 300], ['paper', 1630, 480], ['heart', 1800, 610],
             ['paper', 2030, 520], ['paper', 2800, 520], ['star', 2150, 330], ['shield', 2690, 330],
+            ['poison', 900, 610], ['potion', 1475, 400],
         ],
         boss: { type: 'BossSpider', x: 2500, y: 565, arenaX: 1920 },
     }),

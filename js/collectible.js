@@ -1,3 +1,6 @@
+// Objetos dibujados con la hoja de objetos: [frame, escala]. Se apoyan en el borde inferior de la caja.
+const ITEM_SPRITES = { laptop: ['laptop', 0.5], potion: ['potion', 0.48], poison: ['poison', 0.48] };
+
 class Collectible {
     constructor(x, y, type = 'coin') {
         this.x = x;
@@ -7,17 +10,29 @@ class Collectible {
         this.type = type;
         this.collected = false;
         this.bobOffset = Math.random() * Math.PI * 2;
-        this.value = type === 'coin' ? 10 : type === 'star' ? 50 : 0;
+        this.value = { coin: 10, star: 50, laptop: 200 }[type] || 0;
     }
 
     update() {
         this.bobOffset += 0.05;
     }
 
-    draw(ctx) {
+    // sheet: hoja de objetos (ITEM_FRAMES) para portátil y pociones.
+    draw(ctx, sheet) {
         if (this.collected) return;
 
         const bobY = Math.sin(this.bobOffset) * 4;
+        if (ITEM_SPRITES[this.type] && sheet) {
+            const [name, scale] = ITEM_SPRITES[this.type];
+            if (this.type === 'potion') {
+                ctx.save();
+                ctx.shadowColor = '#b388ff';
+                ctx.shadowBlur = 10 + Math.sin(this.bobOffset * 3) * 6;
+            }
+            sheet.draw(ctx, name, 0, this.x + this.width / 2, this.y + this.height + bobY, scale);
+            if (this.type === 'potion') ctx.restore();
+            return;
+        }
 
         ctx.save();
         ctx.translate(this.x + this.width / 2, this.y + this.height / 2 + bobY);

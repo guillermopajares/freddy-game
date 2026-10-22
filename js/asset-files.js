@@ -19,6 +19,10 @@ const ASSET_FILES = {
     sergio: 'assets/sergio.jpg',
     rober: 'assets/rober.jpg',
     alvaro: 'assets/alvaro.jpg',
+    tony: 'assets/tony.jpg',
+    elena: 'assets/elena.jpg',
+    spiderdani: 'assets/spiderdani.jpg',
+    elements: 'assets/elements.jpg',
 };
 
 if (typeof module !== 'undefined') module.exports = ASSET_FILES;
