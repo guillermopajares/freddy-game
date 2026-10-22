@@ -1,4 +1,4 @@
-const { Progress, ACHIEVEMENTS, RANKING_SIZE } = require('../js/progress.js');
+const { Progress, ACHIEVEMENTS, RANKING_SIZE, NAME_MAX } = require('../js/progress.js');
 
 function memoryStorage(initial) {
     const data = { ...initial };
@@ -39,12 +39,12 @@ describe('Progress', () => {
     test('el ranking se ordena y se queda con los 10 mejores', () => {
         const p = new Progress(memoryStorage());
         for (let i = 1; i <= RANKING_SIZE; i++) p.addToRanking(`J${i}`, i * 100, 'normal');
-        expect(p.qualifiesForRanking(50)).toBe(false);
-        expect(p.qualifiesForRanking(150)).toBe(true);
         expect(p.addToRanking('  Freddy  ', 550, 'hard')).toBe(5);
         expect(p.data.ranking).toHaveLength(RANKING_SIZE);
         expect(p.data.ranking[0].score).toBe(1000);
         expect(p.data.ranking[5]).toEqual({ name: 'Freddy', score: 550, difficulty: 'hard' });
+        p.addToRanking('Un nombre demasiado largo', 2000, 'normal');
+        expect(p.data.ranking[0].name).toHaveLength(NAME_MAX);
     });
 
     test('recordLevel guarda la mejor marca y desbloquea el siguiente nivel', () => {

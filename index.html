@@ -129,11 +129,12 @@
                         <div id="overlay-stars"></div>
                         <div id="overlay-score"></div>
                         <form id="name-entry" hidden>
-                            <label>¡Nuevo récord! Tu nombre:
-                                <input id="name-input" maxlength="10" autocomplete="off" required>
+                            <label>Tu nombre para el ranking:
+                                <input id="name-input" maxlength="15" autocomplete="off" required>
                             </label>
-                            <button type="submit">Guardar</button>
+                            <button type="submit">Enviar</button>
                         </form>
+                        <p id="name-status" hidden></p>
                         <div id="overlay-buttons"></div>
 
                         <div id="panels">
@@ -250,6 +251,7 @@
     <script src="js/level.js"></script>
     <script src="js/story.js"></script>
     <script src="js/progress.js"></script>
+    <script src="js/api.js"></script>
     <script src="js/game.js"></script>
     <script src="js/cabinet.js"></script>
     <script src="js/main.js"></script>

@@ -65,6 +65,8 @@ class Game {
         this.levelTime = 0;
         this.exitTimer = 0;
         this.pendingLevel = null; // { index, stats } mientras se muestra la historia
+        this.selected = null;     // elemento del overlay elegido con el teclado
+        this.spaceLock = false;   // Espacio sigue pulsado desde el menú: no debe lanzar papel
 
         const $ = id => document.getElementById(id);
         this.overlay = $('overlay');
@@ -77,18 +79,26 @@ class Game {
         this.panels = $('panels');
         this.nameEntry = $('name-entry');
         this.nameInput = $('name-input');
+        this.nameSubmit = this.nameEntry.querySelector('button');
+        this.nameStatus = $('name-status');
         this.toast = $('toast');
         this.toastQueue = [];
+        this.onlineRanking = null; // última lista de la API; null = sin cargar o sin conexión
+        this.rankingLoading = false;
+        this.sending = false;
+        this.savedLocally = false; // la copia local se guarda una vez aunque se reintente el envío
 
         this.bindSettings();
         this.nameEntry.addEventListener('submit', (e) => {
             e.preventDefault();
-            this.progress.addToRanking(this.nameInput.value, this.player.score, this.progress.settings.difficulty);
-            this.nameEntry.hidden = true;
-            this.nameInput.blur();
-            this.renderRanking();
-            document.getElementById('ranking').open = true;
+            this.sendScore();
         });
+        // Esc suelta el campo del nombre para seguir navegando sin enviar
+        this.nameInput.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape') this.nameInput.blur();
+        });
+        // Sin foco al hacer clic: si no, InputHandler ignoraría las flechas
+        this.panels.querySelectorAll('summary').forEach(s => s.addEventListener('pointerdown', e => e.preventDefault()));
 
         // Cambiar de pestaña o ventana pausa el juego
         window.addEventListener('blur', () => {
@@ -265,16 +275,37 @@ class Game {
         }));
     }
 
+    // Ranking online; si la API no contesta, el de este navegador.
     renderRanking() {
-        const list = document.getElementById('ranking-list');
-        const ranking = this.progress.data.ranking;
-        list.replaceChildren(...(ranking.length ? ranking : [null]).map(entry => {
+        const offline = !this.onlineRanking && !this.rankingLoading;
+        let lines;
+        if (this.onlineRanking) {
+            lines = this.onlineRanking.map(e => `${e.username} — ${e.points}`);
+        } else if (this.rankingLoading) {
+            lines = ['Cargando…'];
+        } else {
+            lines = this.progress.data.ranking.map(e =>
+                `${e.name} — ${e.score} (${(DIFFICULTY[e.difficulty] || DIFFICULTY.normal).label})`);
+        }
+        document.querySelector('#ranking summary').textContent = offline ? 'Ranking (local, sin conexión)' : 'Ranking';
+        document.getElementById('ranking-list').replaceChildren(...(lines.length ? lines : ['Aún no hay puntuaciones']).map(text => {
             const li = document.createElement('li');
-            li.textContent = entry
-                ? `${entry.name} — ${entry.score} (${(DIFFICULTY[entry.difficulty] || DIFFICULTY.normal).label})`
-                : 'Aún no hay puntuaciones';
+            li.textContent = text;
             return li;
         }));
+    }
+
+    async refreshRanking() {
+        if (this.rankingLoading) return;
+        this.rankingLoading = true;
+        this.renderRanking();
+        try {
+            this.onlineRanking = await RankingApi.fetchRanking(RANKING_SIZE);
+        } catch (e) {
+            this.onlineRanking = null;
+        }
+        this.rankingLoading = false;
+        this.renderRanking();
     }
 
     // --- Pantallas (overlay HTML) ----------------------------------------------------
@@ -289,11 +320,13 @@ class Game {
         this.overlayStars.innerHTML = '';
         this.overlayScore.textContent = score;
         this.nameEntry.hidden = true;
+        this.setNameStatus('');
         this.panels.hidden = !panels;
         this.difficultySelect.disabled = this.state !== 'menu'; // la dificultad se elige al empezar
         if (panels) {
             this.renderAchievements();
             this.renderRanking();
+            if (!this.onlineRanking) this.refreshRanking(); // tras un fallo se reintenta en el siguiente menú
         }
         this.overlayButtons.replaceChildren(...buttons.map(({ label, action, secondary, img }) => {
             const btn = document.createElement('button');
@@ -311,18 +344,146 @@ class Game {
             btn.addEventListener('click', action);
             return btn;
         }));
+        this.select(this.overlayButtons.firstElementChild);
+    }
+
+    // --- Navegación del overlay con teclado ------------------------------------------
+
+    // Lo elegible, en orden de pantalla; se recalcula porque abrir un panel añade sus controles.
+    menuItems() {
+        const items = this.nameEntry.hidden ? [] : [this.nameInput];
+        items.push(...this.overlayButtons.children);
+        if (!this.panels.hidden) {
+            this.panels.querySelectorAll('details').forEach(d => {
+                items.push(d.querySelector('summary'));
+                if (d.open) items.push(...d.querySelectorAll('input, select'));
+            });
+        }
+        return items.filter(el => !el.disabled);
+    }
+
+    select(el) {
+        if (this.selected) this.selected.classList.remove('selected');
+        this.selected = el || null;
+        if (!el || IS_TOUCH) return;
+        el.classList.add('selected');
+        // Sin barra de scroll, la selección no debe perderse; un panel abierto se muestra entero
+        const box = el.tagName === 'SUMMARY' && el.parentElement.open ? el.parentElement : el;
+        box.scrollIntoView({ block: 'nearest' });
+    }
+
+    moveSelection(step) {
+        const items = this.menuItems();
+        const i = items.indexOf(this.selected);
+        this.select(items[Math.max(0, Math.min(items.length - 1, i + step))]);
+    }
+
+    // ←/→: ajusta volumen y dificultad; en el resto pasa al vecino (botones en fila).
+    adjustSelection(dir) {
+        const el = this.selected;
+        if (el && el.type === 'range') {
+            el.value = Number(el.value) + dir * Number(el.step);
+            el.dispatchEvent(new Event('input'));
+        } else if (el && el.tagName === 'SELECT') {
+            el.selectedIndex = Math.max(0, Math.min(el.options.length - 1, el.selectedIndex + dir));
+            el.dispatchEvent(new Event('change'));
+        } else if (!el || el.type !== 'checkbox') {
+            this.moveSelection(dir);
+        }
+    }
+
+    activateSelection() {
+        const el = this.selected;
+        if (!el || !this.menuItems().includes(el)) return;
+        if (el === this.nameInput) el.focus();
+        else if (el.tagName === 'BUTTON' || el.tagName === 'SUMMARY' || el.type === 'checkbox') el.click();
+        if (el.tagName === 'SUMMARY') this.select(el);
+    }
+
+    // Esc cierra el panel abierto; devuelve false si no había ninguno.
+    closePanel() {
+        const open = this.panels.hidden ? null : this.panels.querySelector('details[open]');
+        if (!open) return false;
+        const target = (this.selected && this.selected.closest('details[open]')) || open;
+        target.open = false;
+        this.select(target.querySelector('summary'));
+        return true;
+    }
+
+    // Flechas/WASD o mando; en la selección de personaje ←/→ los cambia handleInput.
+    handleMenuNav(accept) {
+        const input = this.input;
+        const pressed = (...names) => names.some(n => input.isPressed(n));
+        if (pressed('ArrowUp', 'KeyW')) this.moveSelection(-1);
+        if (pressed('down')) this.moveSelection(1);
+        if (this.state !== 'select') {
+            if (pressed('left')) this.adjustSelection(-1);
+            if (pressed('right')) this.adjustSelection(1);
+        }
+        if (accept || pressed('Space', 'Enter')) {
+            this.spaceLock = input.isPressed('Space');
+            this.activateSelection();
+        }
     }
 
     hideOverlay() {
         this.overlay.classList.add('hidden');
     }
 
-    // Pide nombre para el ranking si la puntuación entra en el top 10.
+    // Al acabar la partida se pide el nombre para subir la puntuación al ranking online.
     offerRanking() {
-        if (!this.progress.qualifiesForRanking(this.player.score)) return;
+        this.savedLocally = false;
+        if (this.player.score <= 0) return;
         this.nameEntry.hidden = false;
-        this.nameInput.value = '';
-        if (!IS_TOUCH) this.nameInput.focus();
+        this.nameInput.value = this.progress.data.playerName;
+        if (!IS_TOUCH) {
+            this.nameInput.focus();
+            this.nameInput.select();
+        }
+    }
+
+    setNameStatus(text) {
+        this.nameStatus.textContent = text;
+        this.nameStatus.hidden = !text;
+    }
+
+    async sendScore() {
+        const name = this.nameInput.value.trim().slice(0, NAME_MAX);
+        if (!name || this.sending) return;
+        const score = this.player.score;
+        const state = this.state;
+        if (!this.savedLocally) {
+            this.progress.addToRanking(name, score, this.progress.settings.difficulty);
+            this.savedLocally = true;
+        }
+        this.progress.data.playerName = name;
+        this.progress.save();
+
+        this.sending = true;
+        this.nameInput.disabled = this.nameSubmit.disabled = true;
+        this.setNameStatus('Enviando…');
+        let result = null;
+        try {
+            result = await RankingApi.submitScore(name, score);
+        } catch (e) { /* se avisa abajo y se puede reintentar */ }
+        this.sending = false;
+        this.nameInput.disabled = this.nameSubmit.disabled = false;
+        if (this.state !== state) return; // se ha salido de la pantalla mientras tanto
+
+        if (!result) {
+            this.setNameStatus('No se pudo enviar. Revisa la conexión y pulsa Enviar para reintentar.');
+            if (!IS_TOUCH) this.nameInput.focus(); // Enter reintenta en vez de pulsar el botón elegido
+            return;
+        }
+        this.nameEntry.hidden = true;
+        this.setNameStatus(`¡Puesto #${result.position} en el ranking!`);
+        // Se enseña el ranking actualizado debajo de los botones
+        this.panels.hidden = false;
+        this.renderAchievements();
+        const ranking = document.getElementById('ranking');
+        ranking.open = true;
+        await this.refreshRanking();
+        ranking.scrollIntoView({ block: 'nearest' });
     }
 
     showMenu() {
@@ -337,7 +498,7 @@ class Game {
         this.showOverlay({
             title: 'FREDDY GAME',
             subtitle: 'Desatasca el código',
-            text: IS_TOUCH ? 'Toca Jugar para empezar' : `Pulsa ENTER para empezar${playable > 1 ? ` · 1-${playable}: elegir nivel` : ''}`,
+            text: IS_TOUCH ? 'Toca Jugar para empezar' : `↑↓ elegir · ESPACIO aceptar${playable > 1 ? ` · 1-${playable}: nivel` : ''}`,
             score: highScore ? `Récord: ${highScore}` : '',
             buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons],
             panels: true,
@@ -361,6 +522,7 @@ class Game {
                 action: () => this.selectCharacter(id),
             })),
         });
+        this.select(this.overlayButtons.children[Object.keys(CHARACTERS).indexOf(this.character)]);
     }
 
     get character() {
@@ -446,7 +608,7 @@ class Game {
         this.showOverlay({
             titleClass: 'level-complete-title',
             title: '¡NIVEL SUPERADO!',
-            text: IS_TOUCH ? '' : 'Pulsa ENTER para seguir',
+            text: IS_TOUCH ? '' : 'ESPACIO o ENTER para seguir',
             score: `Puntos: ${this.player.score} · Tiempo: ${formatTime(time)} (mejor ${formatTime(best.time)})`,
             buttons: [{ label: 'Siguiente', action: () => this.nextLevel() }],
         });
@@ -463,7 +625,7 @@ class Game {
         this.showOverlay({
             titleClass: 'game-over-title',
             title: 'GAME OVER',
-            text: IS_TOUCH ? '' : 'ENTER para volver al menú',
+            text: IS_TOUCH ? '' : '↑↓ elegir · ESPACIO aceptar',
             score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
             buttons: [
                 { label: 'Reintentar nivel', action: () => this.startLevel(this.currentLevel, { ...this.levelStartStats, lives: this.progress.difficulty.lives }) },
@@ -618,21 +780,12 @@ class Game {
 
     handleInput() {
         const input = this.input;
-        const typing = !this.nameEntry.hidden;
+        const typing = document.activeElement === this.nameInput;
+        const inMenu = !['loading', 'playing', 'exiting'].includes(this.state);
         const inGame = this.state === 'playing' || this.state === 'paused';
-        // Start del mando: pausa en juego, confirma en los menús (si hiciera las dos, se anularían)
+        // Start del mando: pausa en juego, acepta en los menús (si hiciera las dos, se anularían)
         const start = input.isPressed('start');
-        if ((input.isPressed('confirm') || (start && !inGame)) && !typing) {
-            if (this.state === 'menu') this.newGame(0);
-            else if (this.state === 'select') this.selectCharacter(this.character);
-            else if (this.state === 'story') this.startPendingLevel();
-            else if (this.state === 'levelComplete') this.nextLevel();
-            else if (this.state === 'paused') this.resume();
-            else if (this.state === 'gameOver' || this.state === 'victory') this.showMenu();
-        } else if (input.isPressed('pause') || (start && inGame)) {
-            if (this.state === 'playing') this.pause();
-            else if (this.state === 'paused') this.resume();
-        }
+        if (inMenu && !typing) this.handleMenuNav(start && !inGame);
 
         if (this.state === 'menu') {
             for (let i = 1; i <= Math.min(this.progress.data.unlocked, levels.length); i++) {
@@ -640,7 +793,13 @@ class Game {
             }
         }
 
-        // Elegir personaje con izquierda/derecha (teclado o mando) y confirmar
+        if (input.isPressed('pause') || (start && inGame)) {
+            if (inMenu && !typing && this.closePanel()) return;
+            if (this.state === 'playing') this.pause();
+            else if (this.state === 'paused') this.resume();
+        }
+
+        // Elegir personaje con izquierda/derecha (teclado o mando)
         if (this.state === 'select') {
             const dir = (input.isPressed('right') ? 1 : 0) - (input.isPressed('left') ? 1 : 0);
             if (dir) {
@@ -693,7 +852,10 @@ class Game {
         const player = this.player;
         level.update(this.levelTime);
         this.scenery.update(player, this.camX);
+        // El Espacio con el que se aceptó el menú no cuenta como salto hasta soltarlo
+        if (this.spaceLock) this.input.justPressed.Space = false;
         player.update(this.input, level);
+        if (this.spaceLock && !this.input.isDown('Space')) this.spaceLock = false;
         if (player.landed) {
             this.spawnDust(player.x + player.width / 2, player.y + player.height);
             Sound.play('land');
