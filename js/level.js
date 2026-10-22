@@ -7,7 +7,8 @@ const GROUND_Y = 650;
 //   checkpoints:  [x, yDeLaSuperficie]
 //   enemies:      [tipo, x, y, { health, elite }]
 //   collectibles: [tipo, x, y]
-//   boss:         { type, x, y, arenaX }          la arena va de arenaX a arenaX + 960
+//   boss:         { type, x, y, arenaX, rivalChance? }  la arena va de arenaX a arenaX + 960;
+//                 rivalChance = probabilidad de que lo sustituya un rival (BossRival)
 class Level {
     constructor(data) {
         this.name = data.name;
@@ -89,16 +90,18 @@ const levels = [
     new Level({
         name: 'Nivel 1: El Baño',
         background: 'bg_01',
-        width: 1920,
+        width: 2880,
         spawn: [80, 530],
-        exit: [1830, 570],
-        ground: [[0, 700], [820, 380], [1300, 620]],
+        exit: [2800, 570],
+        ground: [[0, 700], [820, 380], [1300, 1580]],
         platforms: [
             [200, 550, 150], [450, 480, 150], [930, 540, 140], [1100, 440, 120],
             [1500, 520, 140], [1680, 420, 140],
+            // Arena del rival
+            [2150, 540, 130], [2400, 450, 160], [2650, 540, 130],
         ],
         hazards: [[600, 650, 80], [1450, 650, 70]],
-        checkpoints: [[1000, 650]],
+        checkpoints: [[1000, 650], [1840, 650]],
         enemies: [
             ['CodeBug', 380, 570], ['CodeBug', 480, 400], ['CodeBug', 1050, 570],
             ['Error404', 1150, 330], ['CodeBug', 1600, 570],
@@ -107,6 +110,8 @@ const levels = [
             ['coin', 250, 510], ['coin', 500, 440], ['paper', 300, 610], ['shield', 960, 500],
             ['star', 1130, 400], ['coin', 1550, 480], ['star', 1720, 380], ['coin', 1350, 610],
         ],
+        // Otro personaje jugable, elegido al azar entre los que no lleva el jugador
+        boss: { type: 'BossRival', x: 2600, y: 500, arenaX: 1920 },
     }),
 
     new Level({
@@ -135,7 +140,7 @@ const levels = [
             ['coin', 1380, 520], ['triple', 1590, 260], ['star', 1820, 340], ['coin', 1760, 520],
             ['paper', 2050, 610], ['star', 1390, 340], ['heart', 2670, 300],
         ],
-        boss: { type: 'BossBug', x: 3200, y: 480, arenaX: 2400 },
+        boss: { type: 'BossBug', x: 3200, y: 480, arenaX: 2400, rivalChance: 0.5 },
     }),
 
     new Level({
@@ -196,7 +201,7 @@ const levels = [
             ['shield', 2240, 440], ['heart', 2560, 610], ['coin', 2700, 610], ['triple', 1350, 610],
             ['star', 3290, 410],
         ],
-        boss: { type: 'BossGlitch', x: 3400, y: 300, arenaX: 2880 },
+        boss: { type: 'BossGlitch', x: 3400, y: 300, arenaX: 2880, rivalChance: 0.5 },
     }),
 
     new Level({

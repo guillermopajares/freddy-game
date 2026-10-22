@@ -6,6 +6,9 @@
 |---|---|---|
 | `assets/freddy_sprites.png` | 2854×1472 PNG | Freddy: quieto, caminar, correr, saltar, desatascador, papel, daño, derribado, muerte |
 | `assets/enemies.jpg` | 2854×1472 **JPEG** | Bug de código, Bug araña, Error 404, Código espagueti |
+| `assets/dani.jpg`, `assets/guille.jpg`, `david`, `sergio`, `alvaro` | 2752×1536 JPEG | Personajes jugables (frames en `js/characters.js`) |
+| `assets/charly.jpg`, `juancarlos`, `rober` (de `art/Rober-gorra.jpeg`) | 3168×1344 JPEG | Personajes jugables |
+| `assets/fer.jpg`, `assets/dani_car.jpg` | 3168×1344 JPEG | Fer; Dani en coche (`drive`, `crash`) |
 
 Ambas tienen **fondo verde croma** (≈ `rgb(2,253,2)`) y textos de etiqueta debajo de cada fila.
 `chromaKeyFrame` (`js/sprite.js`) lo quita al cargar:
@@ -25,6 +28,11 @@ En `FREDDY_FRAMES` / `ENEMY_FRAMES`: `[x, y, w, h]` o `[x, y, w, h, anchorX]`, e
   (por defecto `w / 2`). Usa `anchorX` cuando un arma sobresale (desatascador, babas): es el centro del cuerpo
   dentro del recorte.
 - Todos los personajes miran a la derecha. El Error 404 es frontal y no se voltea (`mirror = false`).
+- Personajes: escala para que midan ~110 px como Freddy (`CHARACTERS[id].scale`); como rival, ×1.36.
+  Coche de Dani: 0.22. Las hojas de personajes (todas menos Freddy) se cargan con `keepLargest` (solo la figura
+  mayor del recorte) y `seeThrough` (también se borra el verde encerrado). Si dos frames se tocan, usar recortes
+  solapados (`keepLargest` quita al vecino) o, si siguen pegados, un corte recto donde menos figura haya.
+  `anchorX` de los golpes = centro de la cabeza.
 - La escala se aplica al dibujar: Freddy 0.4, `CodeBug` 0.3 (crías 0.18), `Error404` 0.3, `BossBug` 0.6,
   `BossSpider` 0.55, `BossGlitch` 0.45, `Boss404` 0.7.
 - Élites: `SpriteSheet.addTint(nombre, nombre + '_elite', color)` crea copias tintadas al cargar

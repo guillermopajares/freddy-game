@@ -24,9 +24,10 @@ Scripts clásicos cargados en orden desde `index.html`; todo son globales (`clas
 | Fichero | Qué hace |
 |---|---|
 | `js/asset-files.js` | Rutas de imágenes (`ASSET_FILES`) |
-| `js/assets.js` | **20 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
+| `js/assets.js` | **~50 MB** de imágenes en base64, solo para `file://`. Generado: no editar ni leer entero |
 | `js/sprite.js` | Coordenadas de frames de las hojas, chroma key, `SpriteSheet` |
-| `js/input.js` | Teclado + mando + botones táctiles → mismos códigos (`KeyA`, `Space`...) |
+| `js/characters.js` | Frames de los personajes elegibles y del coche de Dani; `CHARACTERS` (escala y stats de cada uno) |
+| `js/input.js` | Teclado + mando + botones táctiles → acciones (`BINDINGS`: `jump`, `fire`, `melee`, `dash`...) |
 | `js/sound.js` | Efectos y música sintetizados con Web Audio (sin ficheros de audio) |
 | `js/collision.js` | AABB y resolución contra plataformas |
 | `js/projectile.js` | Proyectiles del jugador y enemigos (`PROJECTILE_TYPES`) |
@@ -64,7 +65,7 @@ Detalles clave:
 
 ## Trampas conocidas (aprendidas a base de errores)
 
-- **`js/assets.js` pesa 20 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
+- **`js/assets.js` pesa ~50 MB en una línea por imagen.** No hacer `cat`, `grep` sin excluirlo ni `Read` sin límite.
   Para cambiar imágenes: editar `assets/` y `js/asset-files.js`, luego `node tools/build-assets.js`.
 - **`file://` no permite `getImageData` sobre imágenes sueltas** (canvas "tainted"); por eso existe la versión
   embebida. Por http se cargan los ficheros. Probar siempre por http.
@@ -76,6 +77,9 @@ Detalles clave:
 - **Jefes que caen:** si aparecen encima de una plataforma pequeña se quedan atascados (no saltan bordes).
   Los flotantes (`Boss404`, `BossGlitch`) no tienen gravedad y da igual.
 - **La micro-pausa (`hitstop`) se comprueba antes de `handleInput`**; si no, M/Esc se procesan dos veces.
+- **Leer acciones, no teclas:** `input.isDown('jump')`, no `'KeyW'`. Las teclas viven solo en `BINDINGS`; el mando
+  y los botones táctiles (`data-action`) dan acciones directamente. Start del mando es `start`: pausa en juego y
+  confirma en menús (si mandase Enter y Esc a la vez, la pausa se anularía en el mismo frame).
 - **`InputHandler` ignora teclas cuyo destino es `input/select/button/summary`**: escribir el nombre del ranking
   no mueve a Freddy. Los botones del overlay hacen `preventDefault` en `pointerdown` para no quedarse con el foco
   (si no, Enter activa el botón y el juego a la vez).
@@ -85,6 +89,18 @@ Detalles clave:
   No volver a `imageSmoothingQuality = 'high'` (a 2x hundía los fps) ni a `image-rendering: pixelated`.
 - **Medir rendimiento sin `getImageData`:** leer píxeles del canvas hace que Chrome lo pase a modo software
   y falsea la medida (y ralentiza la pestaña hasta recargar).
+- **Personajes:** el elegido se guarda en `settings.character`; `Player` recibe su entrada de `CHARACTERS`
+  (`speed`, `jumpForce`, `punch`, `reach`, `car`). Los no elegidos salen como `BossRival` en el nivel 1 y,
+  con `rivalChance`, en lugar del minijefe de los niveles 2 y 4. `BossRival` no mira bordes: solo en arenas con suelo entero.
+- **`assets/guille.jpg` viene de `art/guille.jpeg`**, que traía un fondo de cuadros (falsa transparencia) en vez de
+  verde: se convirtió a verde croma una vez. Las hojas de personajes (todas menos Freddy) usan `keepLargest` para
+  borrar trozos de frames vecinos y `seeThrough` para el verde encerrado entre brazo y cuerpo.
+- **Nuevo personaje:** hoja en `art/` → copiarla a `assets/<id>.jpg`, entrada en `ASSET_FILES`, frames y entrada en
+  `CHARACTERS` (`js/characters.js`), `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
+  el salto de cada personaje que llega a todo. La selección muestra cinco por fila (`button.character`).
+- **Mueble de recreativa:** `main.js` (`fit`) pone `data-cabinet="full|compact|off"` en `<html>` según el ajuste
+  `cabinet` y el tamaño de la ventana (táctil: siempre `off`), y `no-crt` si se quita el efecto del cristal. Cada modo
+  tiene su tamaño lógico en `SIZES`; si se añade algo al mueble que cambie su alto, actualizarlo ahí.
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
 - **El ranking online es producción**: no enviar puntuaciones de prueba a `API_URL`. En tests se simula `fetch`;
   en el navegador, interceptar `**/api/**` con Playwright. Si la API falla se muestra el ranking local.

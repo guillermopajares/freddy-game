@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Freddy Game - Platform Adventure</title>
+    <!-- "Añadir a pantalla de inicio": abre a pantalla completa y en horizontal -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0d0e11">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -144,20 +150,30 @@
                                         <option value="hard">Difícil (todos élite)</option>
                                     </select>
                                 </label>
+                                <!-- Solo con ratón: en táctil no hay mueble -->
+                                <label class="cabinet-only">Mueble de recreativa
+                                    <select id="opt-cabinet">
+                                        <option value="auto">Automático</option>
+                                        <option value="full">Completo</option>
+                                        <option value="compact">Compacto (sin marquesina ni mandos)</option>
+                                        <option value="off">Sin mueble</option>
+                                    </select>
+                                </label>
+                                <label class="cabinet-only"><input type="checkbox" id="opt-crt"> Efecto de pantalla antigua (líneas y reflejo)</label>
                             </details>
                             <details id="controls">
                                 <summary>Controles</summary>
                                 <div id="controls-info">
-                                    <div class="key-row"><span class="key">W</span><span class="key-desc">Saltar (x2, en pared)</span></div>
-                                    <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key-desc">Moverse</span></div>
-                                    <div class="key-row"><span class="key">S</span><span class="key-desc">Agacharse / caída rápida</span></div>
-                                    <div class="key-row"><span class="key">SHIFT</span><span class="key-desc">Dash (invulnerable)</span></div>
-                                    <div class="key-row"><span class="key">SPC</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
-                                    <div class="key-row"><span class="key">F</span><span class="key-desc">Desatascador (para proyectiles)</span></div>
-                                    <div class="key-row"><span class="key">ESC</span><span class="key-desc">Pausa</span></div>
+                                    <div class="key-row"><span class="key">A</span><span class="key">D</span><span class="key">◀▶</span><span class="key-desc">Moverse</span></div>
+                                    <div class="key-row"><span class="key">SPC</span><span class="key">W</span><span class="key">▲</span><span class="key-desc">Saltar (mantener: más alto; x2, en pared)</span></div>
+                                    <div class="key-row"><span class="key">S</span><span class="key">▼</span><span class="key-desc">Agacharse / caída rápida</span></div>
+                                    <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
+                                    <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
+                                    <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
+                                    <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
                                     <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
                                     <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
-                                    <div class="key-row"><span class="key">🎮</span><span class="key-desc">Mando compatible</span></div>
+                                    <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · gatillos dash · Start pausa</span></div>
                                 </div>
                             </details>
                             <details id="achievements">
@@ -182,12 +198,12 @@
                     <div class="cab-joy-washer"></div>
                     <div class="cab-stick"><div class="cab-shaft"></div><div class="cab-ball"></div></div>
                 </div>
-                <div class="cab-btn red" data-codes="KeyW ArrowUp" style="--x: 402px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>SALTO</span></div>
-                <div class="cab-btn white" data-codes="Space KeyP" style="--x: 494px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAPEL</span></div>
-                <div class="cab-btn yellow" data-codes="KeyF" style="--x: 586px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>GOLPE</span></div>
-                <div class="cab-btn blue" data-codes="ShiftLeft ShiftRight" style="--x: 678px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>DASH</span></div>
-                <div class="cab-btn small" data-codes="Enter" style="--x: 862px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>START</span></div>
-                <div class="cab-btn small" data-codes="Escape" style="--x: 942px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAUSA</span></div>
+                <div class="cab-btn red" data-actions="jump" style="--x: 402px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>SALTO</span></div>
+                <div class="cab-btn white" data-actions="fire" style="--x: 494px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAPEL</span></div>
+                <div class="cab-btn yellow" data-actions="melee" style="--x: 586px; --y: 98px"><b></b><b></b><b></b><b></b><b></b><i></i><span>GOLPE</span></div>
+                <div class="cab-btn blue" data-actions="dash" style="--x: 678px; --y: 112px"><b></b><b></b><b></b><b></b><b></b><i></i><span>DASH</span></div>
+                <div class="cab-btn small" data-actions="confirm start" style="--x: 862px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>START</span></div>
+                <div class="cab-btn small" data-actions="pause" style="--x: 942px; --y: 96px"><b></b><b></b><b></b><b></b><b></b><i></i><span>PAUSA</span></div>
             </div>
             <div class="cab-panel-front"></div>
         </div>
@@ -205,21 +221,25 @@
     <!-- Solo visibles en pantallas táctiles (ver css) -->
     <div id="touch-controls">
         <div class="touch-pad">
-            <button data-code="KeyA" aria-label="Izquierda">◀</button>
-            <button data-code="KeyS" aria-label="Agacharse">▼</button>
-            <button data-code="KeyD" aria-label="Derecha">▶</button>
+            <button data-action="left" aria-label="Izquierda">◀</button>
+            <button data-action="down" aria-label="Agacharse">▼</button>
+            <button data-action="right" aria-label="Derecha">▶</button>
         </div>
         <div class="touch-pad">
-            <button data-code="ShiftLeft" aria-label="Dash">💨</button>
-            <button data-code="KeyF" aria-label="Desatascador">🪠</button>
-            <button data-code="Space" aria-label="Papel">🧻</button>
-            <button data-code="KeyW" aria-label="Saltar" class="big">▲</button>
+            <button data-action="dash" aria-label="Dash">💨</button>
+            <button data-action="melee" aria-label="Golpe">🪠</button>
+            <button data-action="fire" aria-label="Papel">🧻</button>
+            <button data-action="jump" aria-label="Saltar" class="big">▲</button>
         </div>
-        <button id="touch-pause" data-code="Escape" aria-label="Pausa">II</button>
+        <button id="touch-pause" data-action="pause" aria-label="Pausa">II</button>
+        <!-- Sin data-action: lo maneja main.js. Se oculta donde no hay pantalla completa (iPhone) -->
+        <button id="touch-fullscreen" aria-label="Pantalla completa">⛶</button>
+        <p id="rotate-hint">↻ Gira el móvil para verlo más grande</p>
     </div>
 
     <script src="js/asset-files.js"></script>
     <script src="js/sprite.js"></script>
+    <script src="js/characters.js"></script>
     <script src="js/input.js"></script>
     <script src="js/sound.js"></script>
     <script src="js/collision.js"></script>

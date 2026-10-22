@@ -1,0 +1,13 @@
+{
+    "name": "Freddy Game",
+    "short_name": "Freddy",
+    "start_url": "./",
+    "scope": "./",
+    "display": "fullscreen",
+    "orientation": "landscape",
+    "background_color": "#0d0e11",
+    "theme_color": "#0d0e11",
+    "icons": [
+        { "src": "assets/freddy_face.png", "sizes": "256x324", "type": "image/png" }
+    ]
+}
