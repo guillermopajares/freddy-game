@@ -223,4 +223,92 @@ describe('Personajes', () => {
         expect(fer.meleeDamage).toBe(3);
         expect(fer.speed).toBe(4.2);
     });
+
+    test('jumps: 3 da un salto más en el aire (Elena)', () => {
+        const input = makeInput();
+        const elena = new Player(100, 650 - 108, { character: { jumps: 3 } });
+        run(elena, input, 2, level);
+        input.pressed.add('jump');
+        run(elena, input, 10, level);
+        input.pressed.add('jump');
+        run(elena, input, 10, level);
+        expect(elena.jumpsLeft).toBe(1);
+        input.pressed.add('jump');
+        run(elena, input, 1, level);
+        expect(elena.velocityY).toBeLessThan(0);
+        expect(elena.jumpsLeft).toBe(0);
+    });
+
+    test('dash: true alarga el dash y acorta la espera (Tony)', () => {
+        const input = makeInput();
+        const tony = new Player(100, 650 - 108, { character: { dash: true } });
+        run(tony, input, 2, level);
+        input.pressed.add('dash');
+        run(tony, input, 1, level);
+        expect(tony.dashTimer).toBe(21);
+        expect(tony.dashCooldown).toBe(36);
+    });
+
+    test('la poción turbo acelera mientras dura', () => {
+        const input = makeInput();
+        const p = new Player(100, 650 - 108);
+        run(p, input, 2, level);
+        p.powers.turbo = 10;
+        input.down.add('right');
+        run(p, input, 1, level);
+        expect(p.velocityX).toBeCloseTo(3.5 * 1.3);
+        run(p, input, 12, level);
+        expect(p.velocityX).toBe(3.5);
+    });
+});
+
+describe('Ulti', () => {
+    const level = { platforms: [GROUND], width: 960, leftWall: 0 };
+    const DANI = { car: true, speed: 3.5, ultimate: { name: 'SPIDER DANI', speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false } };
+
+    test('la barra solo carga en personajes con ulti y tiene tope', () => {
+        const freddy = new Player(0, 0);
+        freddy.addUltimate(50);
+        expect(freddy.ultimate).toBe(0);
+        const dani = new Player(0, 0, { character: DANI });
+        dani.addUltimate(60);
+        dani.addUltimate(60);
+        expect(dani.ultimate).toBe(Player.ULT_MAX);
+    });
+
+    test('no se activa sin la barra llena', () => {
+        const input = makeInput();
+        const dani = new Player(100, 650 - 108, { character: DANI });
+        dani.addUltimate(Player.ULT_MAX - 1);
+        input.pressed.add('ultimate');
+        run(dani, input, 1, level);
+        expect(dani.ultTimer).toBe(0);
+    });
+
+    test('con la barra llena transforma: stats de la ulti y, al acabar, las normales', () => {
+        const input = makeInput();
+        const dani = new Player(100, 650 - 108, { character: DANI });
+        run(dani, input, 2, level);
+        dani.addUltimate(Player.ULT_MAX);
+        input.pressed.add('ultimate');
+        dani.update(input, level);
+        expect(dani.transformed).toBe(true);
+        expect(dani.ultimate).toBe(0);
+        expect(dani.speed).toBe(4.6);
+        expect(dani.maxJumps).toBe(3);
+        expect(dani.meleeDamage).toBe(5);
+        // Transformado no embiste en coche
+        input.pressed.clear();
+        input.pressed.add('dash');
+        run(dani, input, 1, level);
+        expect(dani.ramming).toBeFalsy();
+        // Mientras dura no carga la barra
+        dani.addUltimate(50);
+        expect(dani.ultimate).toBe(0);
+        run(dani, input, 700, level);
+        expect(dani.ultTimer).toBe(0);
+        expect(dani.speed).toBe(3.5);
+        expect(dani.maxJumps).toBe(2);
+        expect(dani.form.car).toBe(true);
+    });
 });

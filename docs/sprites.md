@@ -7,7 +7,10 @@
 | `assets/freddy_sprites.png` | 2854×1472 PNG | Freddy: quieto, caminar, correr, saltar, desatascador, papel, daño, derribado, muerte |
 | `assets/enemies.jpg` | 2854×1472 **JPEG** | Bug de código, Bug araña, Error 404, Código espagueti |
 | `assets/dani.jpg`, `assets/guille.jpg`, `david`, `sergio`, `alvaro` | 2752×1536 JPEG | Personajes jugables (frames en `js/characters.js`) |
-| `assets/charly.jpg`, `juancarlos`, `rober` (de `art/Rober-gorra.jpeg`) | 3168×1344 JPEG | Personajes jugables |
+| `assets/charly.jpg`, `juancarlos`, `rober` (de `art/Rober-gorra.jpeg`), `tony` | 3168×1344 JPEG | Personajes jugables |
+| `assets/elena.jpg` | 2752×1536 JPEG | Elena (figuras más pequeñas: escala 0.36) |
+| `assets/spiderdani.jpg` | 2752×1536 JPEG | Ulti de Dani; misma maqueta que `dani.jpg`, usa `DANI_FRAMES` |
+| `assets/elements.jpg` | 1376×768 JPEG | Objetos (`ITEM_FRAMES` en `js/sprite.js`): fuego, pociones, portátil, emojis malignos |
 | `assets/fer.jpg`, `assets/dani_car.jpg` | 3168×1344 JPEG | Fer; Dani en coche (`drive`, `crash`) |
 
 Ambas tienen **fondo verde croma** (≈ `rgb(2,253,2)`) y textos de etiqueta debajo de cada fila.

@@ -160,6 +160,34 @@ body::before {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
 }
 
+/* Barra de la ulti: --ult de 0 a 1 (game.js); brilla cuando está llena */
+.ult-bar {
+    display: inline-block;
+    width: 70px;
+    height: 8px;
+    margin-left: 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.ult-bar i {
+    display: block;
+    height: 100%;
+    width: calc(var(--ult, 0) * 100%);
+    background: linear-gradient(90deg, #1e88e5, #e53935);
+}
+
+#ult.ready {
+    border-color: #e53935;
+    animation: ult-ready 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes ult-ready {
+    to { box-shadow: 0 0 12px #e53935; }
+}
+
 #hud-center {
     font-family: 'Press Start 2P', monospace;
     font-size: 11px;
@@ -589,6 +617,21 @@ body::before {
         right: calc(env(safe-area-inset-right) + 12px);
     }
 
+    /* Ulti: encima de los botones de acción, centrado sobre ellos */
+    #touch-ultimate {
+        position: absolute;
+        right: calc(env(safe-area-inset-right) + 12px + var(--btn, 60px) + var(--gap) / 2);
+        bottom: calc(env(safe-area-inset-bottom) + 12px + var(--btn, 60px) * 2 + var(--gap) * 2);
+        transform: translateX(50%);
+        opacity: 0.45;
+    }
+
+    #touch-ultimate.ready {
+        opacity: 1;
+        border-color: #e53935;
+        box-shadow: 0 0 14px #e53935;
+    }
+
     #touch-fullscreen {
         left: calc(env(safe-area-inset-left) + 12px);
     }
@@ -608,6 +651,14 @@ body::before {
 
     [data-touch="portrait"] #touch-fullscreen {
         bottom: calc(env(safe-area-inset-bottom) + 66px);
+    }
+
+    [data-touch="portrait"] #touch-ultimate {
+        right: 50%;
+        bottom: calc(env(safe-area-inset-bottom) + 120px);
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
     }
 
     [data-touch="portrait"] #rotate-hint {

@@ -37,6 +37,25 @@ function reachablePlatforms(level, speed, jumpForce) {
     return P.filter(p => seen.has(p.i));
 }
 
+describe('Fuego intermitente', () => {
+    const level = levels[0];
+    const fire = level.fires[0];
+
+    test('quema encendido y deja pasar apagado', () => {
+        level.update(0);
+        expect(level.fireBounds(fire)).not.toBeNull();
+        level.update(150);
+        expect(level.fireBounds(fire)).toBeNull();
+        level.reset();
+    });
+
+    test('cada fuego está sobre suelo', () => {
+        levels.forEach(l => l.fires.forEach(f => {
+            expect(l.platforms.some(p => p.y === f.y && f.x >= p.x && f.x <= p.x + p.width)).toBe(true);
+        }));
+    });
+});
+
 describe.each(levels.map(l => [l.name, l]))('%s', (name, level) => {
     // Cada personaje corre y salta distinto: el nivel tiene que valerle a todos
     describe.each(Object.entries(CHARACTERS))('con %s', (id, c) => {

@@ -131,15 +131,15 @@ class Enemy {
     }
 
     // Disparo apuntado al jugador; count > 1 = abanico.
-    shoot(player, game, count = 1, spread = 0.3) {
-        const size = PROJECTILE_TYPES.pixel.width;
+    shoot(player, game, count = 1, spread = 0.3, type = 'pixel') {
+        const { width: size, speed } = PROJECTILE_TYPES[type];
         const sx = this.x + this.width / 2;
         const sy = this.y + this.height * 0.45;
         const base = Math.atan2(player.y + player.height / 2 - sy, player.x + player.width / 2 - sx);
         for (let i = 0; i < count; i++) {
             const a = base + (i - (count - 1) / 2) * spread;
             game.enemyProjectiles.push(new Projectile(
-                sx - size / 2, sy - size / 2, Math.cos(a), 'pixel', Math.sin(a) * PROJECTILE_TYPES.pixel.speed
+                sx - size / 2, sy - size / 2, Math.cos(a), type, Math.sin(a) * speed
             ));
         }
         Sound.play('enemyShot');
@@ -604,7 +604,8 @@ class BossBug extends Enemy {
     }
 }
 
-// Minijefe del nivel 4: un 404 inestable que se teletransporta por la arena y dispara ráfagas.
+// Minijefe del nivel 4: un 404 inestable que se teletransporta por la arena y dispara ráfagas
+// de emojis malignos (rojos en la segunda fase).
 class BossGlitch extends Error404 {
     constructor(x, y, opts = {}) {
         super(x, y, { health: 26, elite: false });
@@ -640,7 +641,7 @@ class BossGlitch extends Error404 {
 
         // Ráfaga: tres disparos seguidos tras cada teletransporte
         if (this.burst > 0 && this.stateTime % 10 === 0) {
-            this.shoot(player, game, this.phase === 1 ? 1 : 2, 0.25);
+            this.shoot(player, game, this.phase === 1 ? 1 : 2, 0.25, this.phase === 1 ? 'emoji' : 'emojiRed');
             this.burst--;
         }
         if (this.cooldown === 0) {

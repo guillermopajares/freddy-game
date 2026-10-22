@@ -155,10 +155,50 @@ const ALVARO_FRAMES = {
     death: [[2168, 1394, 568, 126]],
 };
 
-// scale: altura en pantalla parecida a la de Freddy (~110 px). El resto de campos modifican a Player.
+// Los dos primeros puñetazos se tocan por el brazo: recortes solapados, keepLargest quita al vecino.
+const TONY_FRAMES = {
+    idle: [[100, 94, 154, 538]],
+    walk: [[548, 94, 198, 532], [778, 94, 194, 530], [994, 94, 182, 532]],
+    run: [[1366, 122, 292, 502], [1620, 124, 312, 498], [1896, 120, 312, 502]],
+    jump: [[2610, 54, 216, 476]],
+    fall: [[2610, 54, 216, 476]],
+    crouch: [[1190, 888, 254, 386]],
+    melee: [[44, 770, 220, 504, 131], [276, 770, 300, 502, 137], [510, 770, 284, 502, 131]],
+    throw: [[510, 770, 284, 502, 131]],
+    hurt: [[1518, 774, 246, 498], [1776, 786, 248, 484]],
+    knock: [[2132, 850, 460, 356]],
+    downed: [[2132, 850, 460, 356]],
+    land: [[2392, 144, 174, 486]],
+    death: [[2626, 1146, 500, 128]],
+};
+
+// Elena no pega: su "acción" es señalar y apuntar con un objeto.
+const ELENA_FRAMES = {
+    idle: [[122, 46, 102, 306], [324, 46, 104, 308]],
+    walk: [[830, 46, 120, 306], [1012, 44, 144, 304], [1216, 44, 132, 304], [1410, 44, 136, 304]],
+    run: [[80, 450, 190, 280], [308, 452, 190, 280], [528, 450, 168, 282], [750, 450, 174, 280],
+        [960, 450, 188, 272], [1180, 454, 190, 276]],
+    jump: [[1804, 392, 194, 228]],
+    fall: [[2036, 410, 196, 308]],
+    crouch: [[1580, 494, 134, 240]],
+    melee: [[136, 824, 160, 314, 48], [388, 824, 198, 314, 50], [636, 824, 186, 312, 50]],
+    throw: [[636, 824, 186, 312, 50]],
+    hurt: [[1960, 824, 144, 316], [2184, 828, 236, 312]],
+    knock: [[872, 1228, 334, 248]],
+    downed: [[1236, 1228, 334, 250]],
+    land: [[2282, 500, 154, 234]],
+    death: [[1964, 1368, 328, 106]],
+};
+
+// scale: altura en pantalla parecida a la de Freddy (~110 px). El resto de campos modifican a Player
+// (jumps = saltos en el aire incluido el primero; dash = dash largo con poca espera).
+// ultimate: transformación al llenar la barra. La hoja de Spider Dani tiene la misma maqueta que la de Dani.
 const CHARACTERS = {
     freddy: { name: 'Freddy', frames: FREDDY_FRAMES, scale: 0.4, desc: 'Desatascador y papel. Equilibrado' },
-    dani: { name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, desc: 'Dash: embiste con su coche' },
+    dani: {
+        name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, desc: 'Dash: embiste con su coche. Ulti: Spider Dani',
+        ultimate: { name: 'SPIDER DANI', sheet: 'spiderdani', frames: DANI_FRAMES, speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false },
+    },
     fer: { name: 'Fer', frames: FER_FRAMES, scale: 0.185, punch: 1, reach: 20, desc: 'Puñetazo más fuerte y largo' },
     guille: { name: 'Guille', frames: GUILLE_FRAMES, scale: 0.25, speed: 4.2, jumpForce: -13, desc: 'Más rápido y salta más' },
     charly: { name: 'Charly', frames: CHARLY_FRAMES, scale: 0.175, speed: 3, punch: 2, desc: 'Pega el doble de fuerte, pero es lento' },
@@ -167,6 +207,8 @@ const CHARACTERS = {
     sergio: { name: 'Sergio', frames: SERGIO_FRAMES, scale: 0.165, speed: 4.6, desc: 'El más rápido de todos' },
     rober: { name: 'Rober', frames: ROBER_FRAMES, scale: 0.188, speed: 3.9, jumpForce: -12.6, desc: 'Ágil: algo más rápido y saltarín' },
     alvaro: { name: 'Álvaro', frames: ALVARO_FRAMES, scale: 0.175, speed: 3.8, punch: 1, desc: 'Todoterreno: corre y pega algo más' },
+    tony: { name: 'Tony', frames: TONY_FRAMES, scale: 0.205, dash: true, desc: 'Dash largo y casi sin espera' },
+    elena: { name: 'Elena', frames: ELENA_FRAMES, scale: 0.36, speed: 3.8, jumps: 3, desc: 'Triple salto' },
 };
 
 if (typeof module !== 'undefined') module.exports = CHARACTERS;

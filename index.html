@@ -116,6 +116,7 @@
                         <span id="level">NIVEL 1</span>
                     </div>
                     <div id="hud-right">
+                        <span id="ult" hidden>ULTI <b class="ult-bar"><i></i></b></span>
                         <span id="power"></span>
                         <span id="collectibles"></span>
                     </div>
@@ -170,10 +171,11 @@
                                     <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
                                     <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
                                     <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
+                                    <div class="key-row"><span class="key">I</span><span class="key">V</span><span class="key-desc">Ulti con la barra llena (Dani: Spider Dani)</span></div>
                                     <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
                                     <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
                                     <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
-                                    <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · gatillos dash · Start pausa</span></div>
+                                    <div class="key-row"><span class="key">🎮</span><span class="key-desc">A saltar · X papel · B golpe · Y ulti · gatillos dash · Start pausa</span></div>
                                 </div>
                             </details>
                             <details id="achievements">
@@ -232,6 +234,8 @@
             <button data-action="jump" aria-label="Saltar" class="big">▲</button>
         </div>
         <button id="touch-pause" data-action="pause" aria-label="Pausa">II</button>
+            <!-- Solo para personajes con ulti (game.js lo muestra) -->
+        <button id="touch-ultimate" data-action="ultimate" aria-label="Ulti" hidden>⚡</button>
         <!-- Sin data-action: lo maneja main.js. Se oculta donde no hay pantalla completa (iPhone) -->
         <button id="touch-fullscreen" aria-label="Pantalla completa">⛶</button>
         <p id="rotate-hint">↻ Gira el móvil para verlo más grande</p>

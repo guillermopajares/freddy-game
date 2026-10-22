@@ -42,6 +42,20 @@ const ENEMY_FRAMES = {
     spider_death: [[2086, 1240, 336, 170], [2472, 1252, 338, 166]],
 };
 
+// Objetos de assets/elements.jpg (1376x768, mitad de resolución que las demás hojas).
+// El verde del veneno va dentro de la botella: el flood-fill desde el borde no lo toca.
+const ITEM_FRAMES = {
+    fire: [
+        [23, 257, 63, 93], [109, 253, 64, 96], [195, 256, 63, 94], [282, 262, 60, 88], [365, 264, 55, 86],
+        [474, 252, 67, 98], [563, 253, 77, 97], [660, 257, 56, 93], [736, 255, 63, 95], [818, 272, 52, 78],
+    ],
+    poison: [[954, 12, 48, 83]],
+    potion: [[1023, 105, 49, 82]],
+    laptop: [[134, 12, 107, 83]],
+    emoji: [[942, 223, 64, 66], [1028, 223, 63, 66], [1114, 223, 63, 66], [942, 297, 64, 65], [1028, 297, 63, 65]],
+    emojiRed: [[1200, 223, 63, 66], [1286, 223, 63, 66], [1114, 296, 63, 66], [1200, 296, 63, 66], [1286, 297, 63, 65]],
+};
+
 // Recorta un frame y quita el fondo verde. Solo se borra el verde conectado con el borde del
 // recorte (más los huecos de verde puro), así sobreviven los verdes internos: dígitos 404, babas.
 // keepLargest: borra todo lo que no esté unido a la figura principal (trozos de frames vecinos que

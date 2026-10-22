@@ -8,6 +8,7 @@ const BINDINGS = {
     melee: ['KeyJ', 'KeyZ'],
     fire: ['KeyK', 'KeyX'],
     dash: ['KeyL', 'KeyC', 'ShiftLeft', 'ShiftRight'],
+    ultimate: ['KeyI', 'KeyV'],
     pause: ['Escape', 'KeyP'],
     confirm: ['Enter'],
     restart: ['KeyR'],
@@ -55,7 +56,7 @@ class InputHandler {
         });
     }
 
-    // Mando estándar: A salta, X papel, B/Y desatascador, gatillos dash, Start pausa/confirma.
+    // Mando estándar: A salta, X papel, B desatascador, Y ulti, gatillos dash, Start pausa/confirma.
     poll() {
         const pad = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null;
         const next = {};
@@ -68,7 +69,8 @@ class InputHandler {
             next.down = b(13) || ay > 0.6;
             next.jump = b(0) || b(12);
             next.fire = b(2);
-            next.melee = b(1) || b(3);
+            next.melee = b(1);
+            next.ultimate = b(3);
             next.dash = b(4) || b(5) || b(6) || b(7);
             next.start = b(9);
         }
