@@ -24,8 +24,9 @@ window.addEventListener('DOMContentLoaded', () => {
     };
     game.onLayoutChange = fit;
 
-    // En táctil los mandos van fuera de la pantalla de juego: en bandas a los lados (horizontal)
-    // o debajo (vertical). Se descuentan las zonas seguras, que el css pone de padding en #touch-controls.
+    // En táctil la pantalla de juego se ve lo más grande posible: en horizontal, todo el alto (los mandos,
+    // semitransparentes, van en las bandas de los lados y si no caben pisan el borde del juego); en vertical,
+    // todo el ancho con los mandos debajo. Se descuentan las zonas seguras, que el css pone de padding.
     const controls = document.getElementById('touch-controls');
     const touchScale = () => {
         const root = document.documentElement;
@@ -33,14 +34,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const w = window.innerWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
         const h = window.innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
         const portrait = h > w;
-        // Cada banda lateral necesita dos botones de 58 + hueco + márgenes (150); en vertical, debajo,
-        // dos filas de botones con margen (190)
-        const scale = portrait ? Math.min(w / 966, (h - 190) / 726, 1.5) : Math.min((w - 300) / 966, h / 726, 1.5);
-        // Botón tan grande como quepa (44-64 px): en horizontal, en su banda; en vertical, en media pantalla
-        // menos la columna central de pausa
-        const band = portrait ? w / 2 - 30 : (w - 960 * scale) / 2;
+        // Botón según el lado corto: los pulgares no encogen con la pantalla (48-76 px)
+        const btn = Math.max(48, Math.min(76, (portrait ? w : h) * (portrait ? 0.15 : 0.16)));
+        // Vertical: debajo caben la palanca (2,4 botones) y márgenes
+        const scale = portrait ? Math.min(w / 960, (h - btn * 2.4 - 60) / 720, 1.5) : Math.min(w / 960, h / 720, 1.5);
         root.dataset.touch = portrait ? 'portrait' : 'landscape';
-        root.style.setProperty('--btn', `${Math.max(44, Math.min(64, (band - 34) / 2))}px`);
+        root.style.setProperty('--btn', `${btn}px`);
         root.style.setProperty('--game-h', `${720 * scale}px`);
         return scale;
     };
@@ -60,6 +59,14 @@ window.addEventListener('DOMContentLoaded', () => {
             await screen.orientation.lock('landscape');
         } catch (e) { /* sin permiso o sin bloqueo de orientación: se sigue tal cual */ }
     });
+    // En táctil, el primer toque en un botón del menú ("Jugar") pasa a pantalla completa: sin la barra del
+    // navegador el juego se ve entero. Es un gesto del usuario, que es lo que exige el navegador.
+    if (touch.matches && requestFs) {
+        document.getElementById('overlay-buttons').addEventListener('click', () => {
+            if (document.fullscreenElement || document.webkitFullscreenElement) return;
+            Promise.resolve(requestFs.call(el)).catch(() => { /* sin permiso: se sigue tal cual */ });
+        }, { once: true });
+    }
     fit();
     window.addEventListener('resize', fit);
     touch.addEventListener('change', fit);

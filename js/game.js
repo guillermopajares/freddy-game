@@ -2,6 +2,11 @@ const STEP = 1000 / 60; // la física va a 60 Hz aunque la pantalla refresque a 
 const STAR_TYPES = new Set(['coin', 'star', 'heart']); // lo que cuenta para las estrellas del nivel
 const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
 const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
+// Ultis (ver CHARACTERS): jefes quietos los primeros 4 s de `freeze`, un disparo del dron cada medio segundo,
+// radio del imán.
+const FREEZE_BOSS = 240;
+const DRONE_RATE = 30;
+const MAGNET_RANGE = 450;
 const BACKGROUNDS = ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'];
 const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
 const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -29,6 +34,20 @@ function formatTime(seconds) {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// Barras de la selección (0-1). Se calculan de los mismos campos que usa Player, para que el panel
+// no mienta: velocidad, altura de salto (crece con el cuadrado del impulso), daño y alcance del golpe.
+function characterStats(c) {
+    const speed = c.speed ?? 3.5;
+    const jump = (c.jumpForce ?? -12) ** 2;
+    const bar = (v, min, max) => Math.max(0.08, Math.min(1, (v - min) / (max - min)));
+    return [
+        ['Velocidad', bar(speed, 2.2, 4.6)],
+        ['Salto', bar(jump + ((c.jumps ?? 2) - 2) * 40, 100, 196)],
+        ['Fuerza', bar(2 + (c.punch || 0), 0, 4)],
+        ['Alcance', bar(75 + (c.reach || 0), 40, 115)],
+    ];
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -38,7 +57,7 @@ class Game {
         this.input = new InputHandler();
         this.backgrounds = {};
         this.scenery = new Scenery(this.backgrounds);
-        this.progress = new Progress(safeStorage());
+        this.progress = new Progress(safeStorage(), IS_TOUCH ? { difficulty: 'easy' } : {});
         this.state = 'loading';
         this.currentLevel = 0;
         this.player = null;
@@ -56,6 +75,7 @@ class Game {
         this.hitstop = 0;
         this.camX = 0;
         this.banner = null; // { text, timer }
+        this.speech = null; // bocadillo sobre un enemigo: { enemy, text, timer }
         this.boss = null;
         this.pendingBoss = null;
         this.flood = null;
@@ -76,6 +96,12 @@ class Game {
         this.overlayStars = $('overlay-stars');
         this.overlayScore = $('overlay-score');
         this.overlayButtons = $('overlay-buttons');
+        this.overlayContent = $('overlay-content');
+        this.overlayQuote = $('overlay-quote');
+        this.characterPreview = $('character-preview');
+        const play = $('preview-play');
+        play.addEventListener('pointerdown', e => e.preventDefault()); // sin foco, como los del overlay
+        play.addEventListener('click', () => this.selectCharacter(this.character));
         this.panels = $('panels');
         this.nameEntry = $('name-entry');
         this.nameInput = $('name-input');
@@ -322,8 +348,18 @@ class Game {
 
     // --- Pantallas (overlay HTML) ----------------------------------------------------
 
-    showOverlay({ titleClass = '', title, subtitle = null, text = '', score = '', buttons = [], panels = false }) {
+    // quote: frase del personaje elegido (con su retrato); preview: id del personaje a mostrar en grande.
+    showOverlay({ titleClass = '', title, subtitle = null, text = '', quote = '', preview = null, score = '', buttons = [], panels = false }) {
         this.overlay.classList.remove('hidden');
+        this.overlayContent.classList.toggle('select', !!preview);
+        this.characterPreview.hidden = !preview;
+        if (preview) this.renderPreview(preview);
+        this.overlayQuote.hidden = !quote;
+        if (quote) {
+            this.overlayQuote.querySelector('img').src = this.portraits[this.character] || BLANK_IMG;
+            this.overlayQuote.querySelector('b').textContent = CHARACTERS[this.character].name;
+            this.overlayQuote.querySelector('q').textContent = quote;
+        }
         this.overlayTitle.className = titleClass;
         this.overlayTitle.textContent = title;
         this.overlaySubtitle.hidden = !subtitle;
@@ -512,29 +548,63 @@ class Game {
             subtitle: 'Desatasca el código',
             text: IS_TOUCH ? 'Toca Jugar para empezar' : `↑↓ elegir · ESPACIO aceptar${playable > 1 ? ` · 1-${playable}: nivel` : ''}`,
             score: highScore ? `Récord: ${highScore}` : '',
-            buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons],
+            buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons, {
+                label: `Dificultad: ${this.progress.difficulty.label}`, secondary: true, action: () => this.cycleDifficulty(),
+            }],
             panels: true,
         });
     }
 
-    // Elegir personaje; los demás aparecen como jefes rivales.
+    // Botón del menú: pasa a la siguiente dificultad y lo refleja en el desplegable de Ajustes.
+    cycleDifficulty() {
+        const ids = Object.keys(DIFFICULTY);
+        const s = this.progress.settings;
+        s.difficulty = ids[(ids.indexOf(s.difficulty) + 1) % ids.length];
+        this.difficultySelect.value = s.difficulty;
+        this.progress.save();
+        this.showMenu();
+        this.select(this.overlayButtons.lastElementChild);
+    }
+
+    // Elegir personaje; los demás aparecen como jefes rivales. Tocar una tarjeta lo muestra en grande
+    // con sus estadísticas; tocarla otra vez (o ENTER, o "¡A jugar!") lo elige.
     newGame(levelIndex) {
         this.state = 'select';
         this.pendingLevel = { index: levelIndex };
-        // Con diez personajes la habilidad no cabe en la tarjeta: se muestra la del seleccionado
-        const chosen = CHARACTERS[this.character];
         this.showOverlay({
             title: 'ELIGE PERSONAJE',
             subtitle: 'LOS DEMÁS SERÁN TUS RIVALES',
-            text: `${chosen.name}: ${chosen.desc}` + (IS_TOUCH ? '' : ' · ◀ ▶ y ENTER para elegir'),
+            text: IS_TOUCH ? '' : '◀ ▶ elegir · ENTER jugar',
+            preview: this.character,
             buttons: Object.entries(CHARACTERS).map(([id, c]) => ({
                 label: c.name,
                 img: this.portraits[id] || BLANK_IMG, // hoja aún sin llegar: hueco del mismo alto
                 secondary: id !== this.character,
-                action: () => this.selectCharacter(id),
+                action: () => (id === this.character ? this.selectCharacter(id) : this.previewCharacter(id)),
             })),
         });
         this.select(this.overlayButtons.children[Object.keys(CHARACTERS).indexOf(this.character)]);
+    }
+
+    previewCharacter(id) {
+        this.progress.settings.character = id;
+        this.loadSheet(id); // al llegar su hoja se vuelve a pintar la selección con el retrato
+        this.newGame(this.pendingLevel.index);
+    }
+
+    // Panel del personaje: retrato grande, lema y barras comparadas con el resto.
+    renderPreview(id) {
+        const c = CHARACTERS[id];
+        const box = this.characterPreview;
+        box.querySelector('.preview-img').src = this.portraits[id] || BLANK_IMG;
+        box.querySelector('.preview-name').textContent = c.name;
+        box.querySelector('.preview-motto').textContent = CHARACTER_STORY[id] ? CHARACTER_STORY[id].motto : c.desc;
+        box.querySelector('.preview-stats').replaceChildren(...characterStats(c).map(([label, value]) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${label}</span><b><i style="width: ${Math.round(value * 100)}%"></i></b>`;
+            return li;
+        }));
+        box.querySelector('.preview-tags').textContent = c.desc;
     }
 
     get character() {
@@ -559,10 +629,12 @@ class Game {
     showStory(index, stats) {
         this.state = 'story';
         this.pendingLevel = { index, stats };
+        const lore = CHARACTER_STORY[this.character];
         this.showOverlay({
             titleClass: 'level-complete-title',
             title: levels[index].name.toUpperCase(),
             text: STORY[index],
+            quote: lore && lore.levels[index],
             buttons: [{ label: '¡Vamos!', action: () => this.startPendingLevel() }],
         });
     }
@@ -656,7 +728,7 @@ class Game {
         this.showOverlay({
             titleClass: 'victory-title',
             title: '¡HAS GANADO!',
-            text: ENDING,
+            text: (CHARACTER_STORY[this.character] || {}).ending || ENDING,
             score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
             buttons: [{ label: 'Menú', action: () => this.showMenu() }],
         });
@@ -745,9 +817,10 @@ class Game {
         this.level.reset();
         this.scenery.setLevel(this.level);
         this.levelTime = 0;
-        this.player = new Player(this.level.spawnX, this.level.spawnY, { ...stats, character: CHARACTERS[this.character] });
+        this.player = new Player(this.level.spawnX, this.level.spawnY,
+            { ...stats, character: CHARACTERS[this.character], mercy: this.progress.difficulty.mercy });
         const ult = CHARACTERS[this.character].ultimate;
-        if (ult) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
+        if (ult && ult.sheet) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
         document.getElementById('ult').hidden = !ult;
         document.getElementById('touch-ultimate').hidden = !ult;
         this.levelStartStats = { ...stats };
@@ -762,10 +835,11 @@ class Game {
             const id = this.randomRival();
             // Sale al suelo de la arena: los jefes que caen se atascan en plataformas pequeñas
             this.pendingBoss = { ...boss, type: 'BossRival', y: GROUND_Y - 150, character: CHARACTERS[id],
-                sheet: this.sheets[id], carSheet: this.carSheet };
+                rivalId: id, sheet: this.sheets[id], carSheet: this.carSheet };
         } else {
             this.pendingBoss = boss;
         }
+        this.speech = null;
         this.stolen = false;
         this.combo = 0;
         this.comboTimer = 0;
@@ -877,20 +951,45 @@ class Game {
             Sound.play('land');
         }
         if (player.transformed) {
+            const ult = player.character.ultimate;
             const cx = player.x + player.width / 2;
             const cy = player.y + player.height / 2;
-            this.spawnParticles(cx, cy, '#e53935', 24, 16);
-            this.spawnParticles(cx, cy, '#1e88e5', 24, 16);
-            this.announce(`¡${player.character.ultimate.name}!`);
+            for (const color of ult.aura || ULT_AURA) this.spawnParticles(cx, cy, color, 24, 16);
+            if (ult.name) this.announce(`¡${ult.name}!`);
             this.triggerScreenShake(10);
             this.triggerFlash();
+            if (ult.tests) this.runTests();
+            if (ult.redesign) this.redesign();
         }
-        this.enemies.forEach(e => e.update(player, level, this));
-        this.enemyProjectiles.forEach(p => p.update());
+        const ult = player.ultTimer > 0 ? player.form : {};
+        if (ult.freeze) {
+            // Reunión urgente: nadie se mueve; los jefes solo los primeros segundos
+            const bosses = player.ultTimer > ULT_TIME - FREEZE_BOSS;
+            this.enemies.forEach(e => { if (!e.isBoss || bosses) e.stun = Math.max(e.stun, 2); });
+        }
+        // Bullet time: el mundo enemigo va a medio ritmo
+        const enemyTurn = !ult.slowmo || this.levelTime % 2 === 0;
+        if (enemyTurn) this.enemies.forEach(e => e.update(player, level, this));
+        this.updateUltimate(ult);
+        // Sentido arácnido: avisa (con un pitido al empezar) si hay un bug cerca
+        if (player.character.spiderSense) {
+            const px = player.x + player.width / 2;
+            const sensing = !player.dead && this.enemies.some(e => !e.dying &&
+                Math.abs(e.x + e.width / 2 - px) < 260 && Math.abs(e.y - player.y) < 220);
+            if (sensing && !player.sensing) Sound.play('spiderSense');
+            player.sensing = sensing;
+        }
+        if (enemyTurn) this.enemyProjectiles.forEach(p => p.update());
         this.collectibles.forEach(c => c.update());
 
         this.handlePlayerAttacks();
         this.handleDamageToPlayer();
+        if (player.reverted) {
+            const cx = player.x + player.width / 2;
+            this.spawnParticles(cx, player.y + player.height / 2, '#f4511e', 16, 12);
+            this.spawnText(cx, player.y - 20, 'GIT REVERT');
+            this.triggerFlash();
+        }
         this.handleCollectibles();
         this.handleCheckpoints();
         this.updateFlood();
@@ -912,6 +1011,7 @@ class Game {
         this.particles.forEach(p => p.update());
         this.particles = this.particles.filter(p => p.life > 0);
         if (this.banner && --this.banner.timer <= 0) this.banner = null;
+        if (this.speech && (--this.speech.timer <= 0 || this.speech.enemy.dying)) this.speech = null;
 
         if (this.screenShake.intensity > 0) {
             this.screenShake.x = (Math.random() - 0.5) * this.screenShake.intensity;
@@ -976,6 +1076,75 @@ class Game {
         });
     }
 
+    // Efectos de la ulti que tocan el mundo mientras dura (ult = player.form, o {} sin ulti).
+    updateUltimate(ult) {
+        const player = this.player;
+        if (player.dead) return;
+        const px = player.x + player.width / 2;
+        const py = player.y + player.height / 2;
+        if (ult.drone && player.ultTimer % DRONE_RATE === 0) {
+            // El dron dispara al bug más cercano a la vista
+            const drone = player.dronePos;
+            const target = this.visibleEnemies()
+                .map(e => ({ e, dx: e.x + e.width / 2 - drone.x, dy: e.y + e.height / 2 - drone.y }))
+                .sort((a, b) => Math.hypot(a.dx, a.dy) - Math.hypot(b.dx, b.dy))[0];
+            if (target) {
+                const dist = Math.hypot(target.dx, target.dy) || 1;
+                const size = PROJECTILE_TYPES.paper.width;
+                player.projectiles.push(new Projectile(drone.x - size / 2, drone.y - size / 2, target.dx / dist, 'paper',
+                    target.dy / dist * PROJECTILE_TYPES.paper.speed));
+                Sound.play('throw');
+            }
+        }
+        if (ult.magnet) {
+            // Monedas y objetos vuelan hacia él (el veneno no)
+            this.collectibles.forEach(c => {
+                if (c.collected || c.type === 'poison') return;
+                const dx = px - (c.x + c.width / 2);
+                const dy = py - (c.y + c.height / 2);
+                const dist = Math.hypot(dx, dy);
+                if (dist > MAGNET_RANGE || dist < 1) return;
+                const step = Math.min(dist, 7);
+                c.x += dx / dist * step;
+                c.y += dy / dist * step;
+            });
+        }
+    }
+
+    visibleEnemies() {
+        return this.enemies.filter(e => !e.dying && e.x + e.width > this.camX && e.x < this.camX + 960);
+    }
+
+    // Ulti de Elena: los bugs a la vista pasan a monedas; los jefes no se dejan, pero se llevan un golpe.
+    redesign() {
+        for (const e of this.visibleEnemies()) {
+            const cx = e.x + e.width / 2;
+            const cy = e.y + e.height / 2;
+            if (e.isBoss) {
+                this.hitEnemy(e, 4, '#ec407a', this.player.x + this.player.width / 2);
+                continue;
+            }
+            e.markedForDeletion = true;
+            this.spawnParticles(cx, cy, '#ec407a', 14, 10);
+            this.spawnParticles(cx, cy, '#ffd54f', 14, 10);
+            const coin = new Collectible(cx - 14, cy - 14, 'coin');
+            coin.dropped = true; // no cuenta para las estrellas del nivel
+            this.collectibles.push(coin);
+            if (e.carrying) this.collectibles.push(new Collectible(cx + 16, cy - 14, 'paper'));
+        }
+    }
+
+    // Ulti de Rober: un assert contra cada bug en pantalla. Los normales caen; los jefes se llevan un buen golpe.
+    runTests() {
+        const visible = this.visibleEnemies();
+        for (const e of visible) {
+            this.spawnText(e.x + e.width / 2, e.y - 20, '✔ PASS');
+            this.hitEnemy(e, e.isBoss ? 6 : 99, '#43a047', this.player.x + this.player.width / 2);
+        }
+        this.spawnText(this.player.x + this.player.width / 2, this.player.y - 40,
+            visible.length ? `${visible.length} TESTS EN VERDE` : 'NINGÚN BUG A LA VISTA');
+    }
+
     hitEnemy(enemy, damage, color, fromX) {
         const killed = enemy.takeDamage(damage, fromX);
         const cx = enemy.x + enemy.width / 2;
@@ -1001,7 +1170,7 @@ class Game {
         const dropY = enemy.y + enemy.height - 34;
         const paper = !enemy.isBoss && (enemy.carrying || Math.random() < 0.35);
         if (paper) this.collectibles.push(new Collectible(cx - 14, dropY, 'paper'));
-        if (Math.random() < enemy.heartDropChance) {
+        if (Math.random() < enemy.heartDropChance * (this.progress.difficulty.hearts || 1)) {
             const heart = new Collectible(cx - 14 + (paper ? 30 : 0), dropY, 'heart');
             heart.dropped = true; // no cuenta para las estrellas del nivel
             this.collectibles.push(heart);
@@ -1143,7 +1312,7 @@ class Game {
             if (c.type === 'star') player.addUltimate(10);
             if (STAR_TYPES.has(c.type) && !c.dropped) this.collectedCount++;
 
-            if (c.type === 'heart' && player.lives < 5) player.lives++;
+            if (c.type === 'heart' && player.lives < Math.max(5, this.progress.difficulty.lives)) player.lives++;
             if (c.type === 'laptop') {
                 // Vida extra: puede pasar del tope de los corazones
                 player.lives = Math.min(9, player.lives + 1);
@@ -1192,6 +1361,14 @@ class Game {
             this.boss.arenaX = b.arenaX;
             this.enemies.push(this.boss);
             this.announce(`¡JEFE: ${this.boss.name}!`);
+            const lines = b.rivalId && (CHARACTER_STORY[b.rivalId] || {}).rival;
+            if (lines) {
+                const text = lines[Math.floor(Math.random() * lines.length)]
+                    .replace('{player}', CHARACTERS[this.character].name);
+                this.speech = { enemy: this.boss, text, timer: 240 };
+                // Que suelte la frase antes de atacar
+                this.boss.cooldown = Math.max(this.boss.cooldown, 150);
+            }
             this.triggerScreenShake(10);
             Sound.play('boss');
             Sound.music('boss');
@@ -1341,13 +1518,20 @@ class Game {
                 this.scenery.drawShadows(ctx, grounded, this.level.platforms);
                 this.collectibles.forEach(c => c.draw(ctx, this.itemSheet));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
+                if (this.player.ultTimer > 0 && this.player.form.freeze) this.drawFrozen(ctx);
                 this.enemyProjectiles.forEach(p => p.draw(ctx, this.itemSheet));
                 this.drawPlayer(ctx);
+                if (this.speech) this.drawSpeech(ctx, camX);
             }
             if (this.flood && this.flood.started) this.drawFlood(ctx, camX);
             this.particles.forEach(p => p.draw(ctx));
             ctx.restore();
             this.scenery.drawForeground(ctx);
+            if (this.player && this.player.ultTimer > 0 && this.player.form.slowmo) {
+                // Bullet time: tinte verde de pantalla
+                ctx.fillStyle = 'rgba(60, 255, 120, 0.08)';
+                ctx.fillRect(-10, -10, 980, 740);
+            }
 
             if (this.flashAlpha > 0) {
                 ctx.globalAlpha = this.flashAlpha;
@@ -1460,6 +1644,61 @@ class Game {
         ctx.restore();
     }
 
+    // Ulti de Charly: los enemigos parados en la reunión llevan un 💤 encima.
+    drawFrozen(ctx) {
+        ctx.save();
+        ctx.font = '34px sans-serif';
+        ctx.textAlign = 'center';
+        const bob = Math.sin(this.levelTime / 12) * 4;
+        this.enemies.forEach(e => {
+            if (!e.dying && e.stun > 0) ctx.fillText('💤', e.x + e.width / 2 + 14, e.y - 22 + bob);
+        });
+        ctx.restore();
+    }
+
+    // Bocadillo de cómic sobre la cabeza del que habla (coordenadas de mundo), sin salirse de la pantalla.
+    drawSpeech(ctx, camX) {
+        const { enemy, text, timer } = this.speech;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, timer / 20);
+        ctx.font = 'bold 18px sans-serif';
+        const words = text.split(' ');
+        const lines = [''];
+        for (const word of words) {
+            const test = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${word}` : word;
+            if (ctx.measureText(test).width > 300 && lines[lines.length - 1]) lines.push(word);
+            else lines[lines.length - 1] = test;
+        }
+        const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 32;
+        const h = lines.length * 24 + 46;
+        const cx = enemy.x + enemy.width / 2;
+        const x = Math.max(camX + 10, Math.min(camX + 950 - w, cx - w / 2));
+        const y = enemy.y - h - 24;
+        const tailX = Math.max(x + 20, Math.min(x + w - 20, cx));
+
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 14);
+        ctx.moveTo(tailX - 10, y + h);
+        ctx.lineTo(cx, enemy.y - 4);
+        ctx.lineTo(tailX + 10, y + h);
+        ctx.fill();
+        ctx.stroke();
+        // Tapa el trazo del borde donde nace el pico
+        ctx.fillRect(tailX - 8, y + h - 3, 16, 5);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#e65100';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(enemy.character.name.toUpperCase(), x + 16, y + 22);
+        ctx.fillStyle = '#111';
+        ctx.font = 'bold 18px sans-serif';
+        lines.forEach((l, i) => ctx.fillText(l, x + 16, y + 46 + i * 24));
+        ctx.restore();
+    }
+
     drawMenuBackground() {
         const ctx = this.ctx;
         if (this.backgrounds.bg_00) {
@@ -1511,6 +1750,11 @@ class Game {
             this.accumulator -= STEP;
         }
         this.draw();
+        const playing = this.state === 'playing' || this.state === 'exiting';
+        if (playing !== this.wasPlaying) {
+            this.wasPlaying = playing;
+            document.documentElement.classList.toggle('playing', playing); // css: mandos táctiles de juego
+        }
         requestAnimationFrame(t => this.gameLoop(t));
     }
 }

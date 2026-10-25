@@ -192,23 +192,75 @@ const ELENA_FRAMES = {
 
 // scale: altura en pantalla parecida a la de Freddy (~110 px). El resto de campos modifican a Player
 // (jumps = saltos en el aire incluido el primero; dash = dash largo con poca espera).
-// ultimate: transformación al llenar la barra. La hoja de Spider Dani tiene la misma maqueta que la de Dani.
+// ultimate: transformación de ULT_TIME frames al llenar la barra. Sus campos se ponen encima del personaje
+// (Player.form). `name`: cartel al activarla (sin él, no hay cartel). `sheet`: hoja propia (la de Dani tiene su
+// misma maqueta); sin ella se queda con la suya y solo cambia el `aura`. Efectos (los aplican Player y Game):
+//   tests: golpea a todo lo que se ve · powers: dorado y triple · freeAmmo: el papel no gasta
+//   mirror: el golpe sale a los dos lados · revert: si le dan, vuelve a donde estaba hace un momento sin daño
+//   freeze: enemigos quietos · drone: dron que dispara solo · magnet: atrae objetos · slowmo: enemigos a cámara lenta
+//   shieldRegen: escudo que se recarga · dashHit: el dash golpea · redesign: los bugs a la vista pasan a monedas
+// spiderSense: rayitas sobre la cabeza con un bug cerca.
 const CHARACTERS = {
-    freddy: { name: 'Freddy', frames: FREDDY_FRAMES, scale: 0.4, desc: 'Desatascador y papel. Equilibrado' },
-    dani: {
-        name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, desc: 'Dash: embiste con su coche. Ulti: Spider Dani',
-        ultimate: { name: 'SPIDER DANI', sheet: 'spiderdani', frames: DANI_FRAMES, speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false },
+    freddy: {
+        name: 'Freddy', frames: FREDDY_FRAMES, scale: 0.4,
+        desc: 'Equilibrado. Ulti: desatascador dorado y papel triple infinito',
+        ultimate: { name: 'DESATASCO TOTAL', powers: true, freeAmmo: true, aura: ['#ffd700', '#ff9800'] },
     },
-    fer: { name: 'Fer', frames: FER_FRAMES, scale: 0.185, punch: 1, reach: 20, desc: 'Puñetazo más fuerte y largo' },
-    guille: { name: 'Guille', frames: GUILLE_FRAMES, scale: 0.25, speed: 4.2, jumpForce: -13, desc: 'Más rápido y salta más' },
-    charly: { name: 'Charly', frames: CHARLY_FRAMES, scale: 0.175, speed: 3, punch: 2, desc: 'Pega el doble de fuerte, pero es lento' },
-    david: { name: 'David', frames: DAVID_FRAMES, scale: 0.2, speed: 3.2, jumpForce: -14, desc: 'Salta muchísimo, pero corre menos' },
-    juancarlos: { name: 'Juan Carlos', frames: JUANCARLOS_FRAMES, scale: 0.18, reach: 40, desc: 'El puñetazo que más lejos llega' },
-    sergio: { name: 'Sergio', frames: SERGIO_FRAMES, scale: 0.165, speed: 4.6, desc: 'El más rápido de todos' },
-    rober: { name: 'Rober', frames: ROBER_FRAMES, scale: 0.188, speed: 3.9, jumpForce: -12.6, desc: 'Ágil: algo más rápido y saltarín' },
-    alvaro: { name: 'Álvaro', frames: ALVARO_FRAMES, scale: 0.175, speed: 3.8, punch: 1, desc: 'Todoterreno: corre y pega algo más' },
-    tony: { name: 'Tony', frames: TONY_FRAMES, scale: 0.205, dash: true, desc: 'Dash largo y casi sin espera' },
-    elena: { name: 'Elena', frames: ELENA_FRAMES, scale: 0.36, speed: 3.8, jumps: 3, desc: 'Triple salto' },
+    dani: {
+        name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, spiderSense: true,
+        desc: 'Dash: embiste con su coche. Sentido arácnido. Ulti: más rápido, fuerte y triple salto',
+        ultimate: { name: 'SENTIDO ARÁCNIDO', sheet: 'spiderdani', frames: DANI_FRAMES, speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false },
+    },
+    fer: {
+        name: 'Fer', frames: FER_FRAMES, scale: 0.185, punch: 1, reach: 20,
+        desc: 'Puñetazo más fuerte y largo. Ulti: golpea a los dos lados a la vez',
+        ultimate: { name: 'OMNIPRESENTE', mirror: true, aura: ['#7e57c2', '#26c6da'] },
+    },
+    guille: {
+        name: 'Guille', frames: GUILLE_FRAMES, scale: 0.25, speed: 4.2, jumpForce: -13,
+        desc: 'Más rápido y salta más. Ulti: si le dan, vuelve atrás sin daño',
+        ultimate: { name: 'GIT REVERT', revert: true, aura: ['#f4511e', '#ffffff'] },
+    },
+    charly: {
+        name: 'Charly', frames: CHARLY_FRAMES, scale: 0.175, speed: 3, punch: 2,
+        desc: 'Pega el doble, pero es lento. Ulti: deja quietos a los enemigos',
+        ultimate: { name: 'REUNIÓN URGENTE', freeze: true, aura: ['#42a5f5', '#e3f2fd'] },
+    },
+    david: {
+        name: 'David', frames: DAVID_FRAMES, scale: 0.2, speed: 3.2, jumpForce: -14,
+        desc: 'Salta muchísimo, pero corre menos. Ulti: un dron que dispara solo',
+        ultimate: { name: 'AGENTE IA', drone: true, aura: ['#00e5ff', '#d500f9'] },
+    },
+    juancarlos: {
+        name: 'Juan Carlos', frames: JUANCARLOS_FRAMES, scale: 0.18, reach: 40,
+        desc: 'El golpe que más lejos llega. Ulti: atrae los objetos y llega aún más',
+        ultimate: { name: 'LO QUIERO PARA AYER', magnet: true, reach: 80, aura: ['#ffb300', '#ff7043'] },
+    },
+    sergio: {
+        name: 'Sergio', frames: SERGIO_FRAMES, scale: 0.165, speed: 4.6,
+        desc: 'El más rápido de todos. Ulti: los enemigos van a cámara lenta',
+        ultimate: { name: 'BULLET TIME', slowmo: true, aura: ['#76ff03', '#212121'] },
+    },
+    rober: {
+        name: 'Rober', frames: ROBER_FRAMES, scale: 0.188, speed: 3.9, jumpForce: -12.6,
+        desc: 'Ágil. Ulti: lanza los tests contra todos los bugs a la vista',
+        ultimate: { name: 'TODO EN VERDE', tests: true, punch: 2, aura: ['#43a047', '#c6ff00'] },
+    },
+    alvaro: {
+        name: 'Álvaro', frames: ALVARO_FRAMES, scale: 0.175, speed: 3.8, punch: 1,
+        desc: 'Todoterreno: corre y pega algo más. Ulti: escudo que se recarga',
+        ultimate: { name: 'SOPORTE 24/7', shieldRegen: true, aura: ['#29b6f6', '#ffffff'] },
+    },
+    tony: {
+        name: 'Tony', frames: TONY_FRAMES, scale: 0.205, dash: true,
+        desc: 'Dash largo y casi sin espera. Ulti: dash continuo que golpea',
+        ultimate: { name: 'VISITA RELÁMPAGO', dashHit: true, dashCooldown: 16, aura: ['#ffee58', '#ff6f00'] },
+    },
+    elena: {
+        name: 'Elena', frames: ELENA_FRAMES, scale: 0.36, speed: 3.8, jumps: 3,
+        desc: 'Triple salto. Ulti: los bugs pasan a monedas y salta sin límite',
+        ultimate: { name: 'REDISEÑO', redesign: true, jumps: 99, aura: ['#ec407a', '#ffd54f'] },
+    },
 };
 
 if (typeof module !== 'undefined') module.exports = CHARACTERS;

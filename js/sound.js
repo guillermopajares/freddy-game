@@ -105,6 +105,9 @@ const Sound = {
                 this.tone(200, 0.5, { type: 'sawtooth', slide: 600, volume: 0.1 });
                 [523, 784, 1047, 1568].forEach((f, i) => this.tone(f, 0.14, { type: 'square', delay: 0.3 + i * 0.06, volume: 0.06 }));
                 break;
+            case 'spiderSense': // sentido arácnido: vibrato agudo corto
+                [1400, 1700, 1400, 1700].forEach((f, i) => this.tone(f, 0.05, { type: 'sine', delay: i * 0.045, volume: 0.04 }));
+                break;
             case 'steal': this.tone(900, 0.2, { type: 'square', slide: -700, volume: 0.06 }); break;
             case 'glitch':
                 [1800, 300, 1400, 200].forEach((f, i) => this.tone(f, 0.04, { delay: i * 0.035, volume: 0.05 }));

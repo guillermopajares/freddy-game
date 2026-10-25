@@ -127,6 +127,11 @@
                         <p id="overlay-subtitle">Desatasca el código</p>
                         <div id="overlay-divider"></div>
                         <p id="overlay-text"></p>
+                        <!-- Lo que dice el personaje elegido (historia entre niveles) -->
+                        <figure id="overlay-quote" hidden>
+                            <img alt="">
+                            <figcaption><b></b><q></q></figcaption>
+                        </figure>
                         <div id="overlay-stars"></div>
                         <div id="overlay-score"></div>
                         <form id="name-entry" hidden>
@@ -136,6 +141,15 @@
                             <button type="submit">Enviar</button>
                         </form>
                         <p id="name-status" hidden></p>
+                        <!-- Selección de personaje: el elegido en grande con sus estadísticas (game.js) -->
+                        <div id="character-preview" hidden>
+                            <img class="preview-img" alt="">
+                            <h2 class="preview-name"></h2>
+                            <p class="preview-motto"></p>
+                            <ul class="preview-stats"></ul>
+                            <p class="preview-tags"></p>
+                            <button type="button" id="preview-play">¡A jugar!</button>
+                        </div>
                         <div id="overlay-buttons"></div>
 
                         <div id="panels">
@@ -146,7 +160,7 @@
                                 <label><input type="checkbox" id="opt-flash"> Destellos al recibir daño</label>
                                 <label>Dificultad
                                     <select id="opt-difficulty">
-                                        <option value="easy">Fácil (5 vidas, enemigos débiles)</option>
+                                        <option value="easy">Fácil (6 vidas, enemigos y jefes débiles)</option>
                                         <option value="normal">Normal</option>
                                         <option value="hard">Difícil (todos élite)</option>
                                     </select>
@@ -171,7 +185,7 @@
                                     <div class="key-row"><span class="key">J</span><span class="key">Z</span><span class="key-desc">Golpe (para proyectiles)</span></div>
                                     <div class="key-row"><span class="key">K</span><span class="key">X</span><span class="key-desc">Papel (mantener: rollo gigante)</span></div>
                                     <div class="key-row"><span class="key">L</span><span class="key">C</span><span class="key-desc">Dash / coche de Dani (SHIFT también)</span></div>
-                                    <div class="key-row"><span class="key">I</span><span class="key">V</span><span class="key-desc">Ulti con la barra llena (Dani: Spider Dani)</span></div>
+                                    <div class="key-row"><span class="key">I</span><span class="key">V</span><span class="key-desc">Ulti con la barra llena (cada personaje tiene la suya)</span></div>
                                     <div class="key-row"><span class="key">ESC</span><span class="key">P</span><span class="key-desc">Pausa</span></div>
                                     <div class="key-row"><span class="key">R</span><span class="key-desc">Reiniciar nivel</span></div>
                                     <div class="key-row"><span class="key">M</span><span class="key-desc">Sonido on/off</span></div>
@@ -220,22 +234,19 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
 
-    <!-- Solo visibles en pantallas táctiles (ver css) -->
+    <!-- Solo visibles en pantallas táctiles (ver css); los de juego, solo mientras se juega -->
     <div id="touch-controls">
+        <!-- Palanca: se arrastra el dedo sin levantarlo (input.js). Abajo = agacharse -->
+        <div class="touch-stick" data-stick aria-label="Moverse"><i class="touch-knob"></i></div>
         <div class="touch-pad">
-            <button data-action="left" aria-label="Izquierda">◀</button>
-            <button data-action="down" aria-label="Agacharse">▼</button>
-            <button data-action="right" aria-label="Derecha">▶</button>
-        </div>
-        <div class="touch-pad">
-            <button data-action="dash" aria-label="Dash">💨</button>
-            <button data-action="melee" aria-label="Golpe">🪠</button>
-            <button data-action="fire" aria-label="Papel">🧻</button>
-            <button data-action="jump" aria-label="Saltar" class="big">▲</button>
+            <button data-action="dash" class="blue" aria-label="Dash">💨<span>DASH</span></button>
+            <button data-action="fire" class="white" aria-label="Papel">🧻<span>PAPEL</span></button>
+            <button data-action="melee" class="yellow" aria-label="Golpe">🪠<span>GOLPE</span></button>
+            <button data-action="jump" class="red big" aria-label="Saltar">▲<span>SALTO</span></button>
         </div>
         <button id="touch-pause" data-action="pause" aria-label="Pausa">II</button>
-            <!-- Solo para personajes con ulti (game.js lo muestra) -->
-        <button id="touch-ultimate" data-action="ultimate" aria-label="Ulti" hidden>⚡</button>
+        <!-- Solo para personajes con ulti (game.js lo muestra) -->
+        <button id="touch-ultimate" data-action="ultimate" aria-label="Ulti" hidden>⚡<span>ULTI</span></button>
         <!-- Sin data-action: lo maneja main.js. Se oculta donde no hay pantalla completa (iPhone) -->
         <button id="touch-fullscreen" aria-label="Pantalla completa">⛶</button>
         <p id="rotate-hint">↻ Gira el móvil para verlo más grande</p>

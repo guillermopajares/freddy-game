@@ -9,6 +9,9 @@ const JUMP_BUFFER = 8; // frames que se recuerda un salto pulsado justo antes de
 const JUMP_CUT = -4; // soltar el salto mientras sube lo corta: salto corto
 const ULT_MAX = 100; // barra de la ulti: se llena matando enemigos y recogiendo monedas y estrellas
 const ULT_TIME = 600; // 10 s transformado
+const ULT_AURA = ['#e53935', '#1e88e5']; // colores de la ulti si el personaje no trae `aura`
+const REVERT_FRAMES = 90; // ulti `revert`: vuelve a donde pisaba hace 1,5 s
+const SHIELD_REGEN = 120; // ulti `shieldRegen`: el escudo vuelve a los 2 s de romperse
 
 class Player {
     // stats.character: entrada de CHARACTERS (sin ella, Freddy).
@@ -38,6 +41,7 @@ class Player {
         this.shield = false;
 
         this.invincibleTimer = 0;
+        this.mercy = stats.mercy ?? 1; // invencibilidad tras un golpe más larga en Fácil (DIFFICULTY.mercy)
         this.crouching = false;
         this.dashTimer = 0;
         this.dashCooldown = 0;
@@ -49,6 +53,10 @@ class Player {
         this.ultimate = 0; // carga de la barra (0-ULT_MAX); solo si el personaje tiene ulti
         this.ultTimer = 0;
         this.transformed = false; // se ha transformado este frame (el juego pone el efecto)
+        this.sensing = false; // sentido arácnido: el juego lo activa con un bug cerca
+        this.history = []; // ulti `revert`: posiciones recientes a las que volver si le dan
+        this.reverted = false; // ha vuelto atrás en vez de recibir el golpe (el juego pone el efecto)
+        this.shieldTimer = 0; // ulti `shieldRegen`: frames hasta recargar el escudo
         this.coyote = 0;
         this.jumpBuffer = 0;
         this.jumpHeld = false; // salto iniciado por el jugador que aún se puede cortar
@@ -84,9 +92,9 @@ class Player {
         return (this.powers.gold > 0 ? 3 : 2) + (this.form.punch || 0);
     }
 
-    // Dani: su dash es una embestida en coche que daña a lo que atropella.
+    // Dani: su dash es una embestida en coche que daña a lo que atropella (y el de Tony con la ulti).
     get ramming() {
-        return this.form.car && this.dashTimer > 0;
+        return (this.form.car || this.form.dashHit) && this.dashTimer > 0;
     }
 
     addUltimate(amount) {
@@ -99,6 +107,30 @@ class Player {
         this.speed = f.speed ?? 3.5;
         this.jumpForce = f.jumpForce ?? -12;
         this.maxJumps = f.jumps ?? 2;
+        this.jumpsLeft = Math.min(this.jumpsLeft, this.maxJumps); // al acabar los saltos sin límite de Elena
+    }
+
+    // Efectos de la ulti que solo dependen del jugador; los que tocan el mundo los aplica Game.
+    updateUltimate() {
+        const f = this.form;
+        if (f.revert && this.onGround) {
+            // Solo puntos con suelo: volver a uno en el aire podría dejarlo encima de un hueco
+            this.history.push({ x: this.x, y: this.y });
+            if (this.history.length > REVERT_FRAMES) this.history.shift();
+        }
+        if (f.shieldRegen && !this.shield && ++this.shieldTimer >= SHIELD_REGEN) {
+            this.shield = true;
+            this.shieldTimer = 0;
+            Sound.play('shield');
+        }
+    }
+
+    // Posición del dron de la ulti `drone`: flota detrás de la cabeza.
+    get dronePos() {
+        return {
+            x: this.x + this.width / 2 - this.facing * 34,
+            y: this.y - 28 + Math.sin(this.tick / 10) * 4,
+        };
     }
 
     update(input, level) {
@@ -109,8 +141,13 @@ class Player {
         if (this.powers.triple > 0) this.powers.triple--;
         if (this.powers.gold > 0) this.powers.gold--;
         if (this.powers.turbo > 0) this.powers.turbo--;
-        if (this.ultTimer > 0 && --this.ultTimer === 0) this.applyForm();
+        if (this.ultTimer > 0 && --this.ultTimer === 0) {
+            this.applyForm();
+            this.history = [];
+        }
         this.transformed = false;
+        this.reverted = false;
+        if (this.ultTimer > 0 && !this.dead) this.updateUltimate();
         if (this.action && --this.action.timer <= 0) this.action = null;
 
         if (this.dead) {
@@ -141,7 +178,7 @@ class Player {
             this.dashTimer = 0;
             this.shield = false;
             this.takeDamage(1, this.x);
-            if (!this.dead) {
+            if (!this.dead && !this.reverted) {
                 this.x = this.spawnX;
                 this.y = this.spawnY;
                 this.velocityX = 0;
@@ -175,13 +212,18 @@ class Player {
             this.ultTimer = ULT_TIME;
             this.transformed = true;
             this.applyForm();
+            const f = this.form;
+            if (f.powers) this.powers.gold = this.powers.triple = ULT_TIME;
+            if (f.shieldRegen) this.shield = true;
+            this.history = [];
+            this.shieldTimer = 0;
             Sound.play('ultimate');
         }
 
         const car = this.form.car;
         if (input.isPressed('dash') && this.dashCooldown === 0 && !crouch && !stunned) {
             this.dashTimer = car ? RAM_TIME : this.form.dash ? 22 : 14;
-            this.dashCooldown = car ? 90 : this.form.dash ? 36 : 50;
+            this.dashCooldown = this.form.dashCooldown ?? (car ? 90 : this.form.dash ? 36 : 50);
             this.meleeHits.clear();
             Sound.play('dash');
         }
@@ -256,7 +298,7 @@ class Player {
         // Papel: pulsar = rollo normal; mantener CHARGE_TIME frames = rollo gigante que atraviesa.
         const fireHeld = input.isDown('fire');
         const firePressed = input.isPressed('fire');
-        if ((fireHeld || firePressed) && this.ammo > 0 && this.attackCooldown === 0) {
+        if ((fireHeld || firePressed) && (this.ammo > 0 || this.form.freeAmmo) && this.attackCooldown === 0) {
             this.charge++;
         }
         if (!fireHeld && this.charge > 0) {
@@ -274,8 +316,12 @@ class Player {
     }
 
     throwPaper(big) {
-        if (this.ammo < 3) big = false;
-        this.ammo -= big ? 3 : 1;
+        if (this.form.freeAmmo) {
+            // Papel infinito: no gasta
+        } else {
+            if (this.ammo < 3) big = false;
+            this.ammo -= big ? 3 : 1;
+        }
         this.attackCooldown = big ? 30 : 16;
         this.action = { name: 'throw', timer: 14, duration: 14 };
         Sound.play(big ? 'throwBig' : 'throw');
@@ -295,12 +341,11 @@ class Player {
         const progress = 1 - this.action.timer / this.action.duration;
         if (progress < 0.25 || progress > 0.85) return null;
         const reach = (this.powers.gold > 0 ? 110 : 75) + (this.form.reach || 0);
-        return {
-            x: this.facing === 1 ? this.x + this.width - 5 : this.x - reach + 5,
-            y: this.y + 20,
-            width: reach,
-            height: this.height - 20,
-        };
+        const y = this.y + 20;
+        const height = this.height - 20;
+        // Ulti `mirror`: su doble golpea a la vez por detrás
+        if (this.form.mirror) return { x: this.x - reach + 5, y, width: this.width - 10 + reach * 2, height };
+        return { x: this.facing === 1 ? this.x + this.width - 5 : this.x - reach + 5, y, width: reach, height };
     }
 
     // heavy = golpe de jefe: Freddy acaba derribado en el barro. Devuelve true si el golpe ha entrado.
@@ -310,6 +355,19 @@ class Player {
         const dir = this.x + this.width / 2 < fromX ? -1 : 1;
         this.charge = 0;
         this.dashTimer = 0;
+
+        if (this.ultTimer > 0 && this.form.revert && this.history.length) {
+            const back = this.history[0];
+            this.history = [];
+            this.x = back.x;
+            this.y = back.y;
+            this.velocityX = 0;
+            this.velocityY = 0;
+            this.invincibleTimer = 45;
+            this.reverted = true;
+            Sound.play('glitch');
+            return false;
+        }
 
         if (this.shield) {
             this.shield = false;
@@ -321,7 +379,7 @@ class Player {
 
         this.lives = Math.max(0, this.lives - amount);
         this.hitsTaken++;
-        this.invincibleTimer = heavy ? 110 : 90;
+        this.invincibleTimer = Math.round((heavy ? 110 : 90) * this.mercy);
         this.action = heavy ? { name: 'downed', timer: 50, duration: 50 } : { name: 'hurt', timer: 24, duration: 24 };
         this.velocityX = dir * (heavy ? 3 : 5);
         this.velocityY = heavy ? -4 : -6;
@@ -368,23 +426,38 @@ class Player {
         if (this.invincibleTimer > 0 && Math.floor(this.invincibleTimer / 5) % 2 === 0) {
             ctx.globalAlpha = 0.45;
         }
-        if (this.ramming) {
+        if (this.ramming && this.form.car) {
             const crash = this.meleeHits.size > 0;
             carSheet.draw(ctx, crash ? 'crash' : 'drive', Math.floor(this.tick / 5), cx, bottom, CAR_SCALE, this.facing);
             ctx.restore();
             return;
         }
+        const alpha = ctx.globalAlpha;
         if (this.dashTimer > 0) {
             ctx.globalAlpha = 0.25;
             sheet.draw(ctx, name, frame, cx - this.facing * 24, bottom, scale, this.facing);
-            ctx.globalAlpha = 1;
+            ctx.globalAlpha = alpha;
+        }
+        if (this.ultTimer > 0 && this.form.revert && this.history.length) {
+            // Sombra del punto al que volverá si le dan
+            const back = this.history[0];
+            ctx.globalAlpha = 0.22;
+            sheet.draw(ctx, 'idle', 0, back.x + this.width / 2, back.y + this.height, scale, this.facing);
+            ctx.globalAlpha = alpha;
+        }
+        if (this.ultTimer > 0 && this.form.mirror) {
+            // Su doble, de espaldas: golpea a la vez por detrás
+            ctx.globalAlpha = 0.45 * alpha;
+            sheet.draw(ctx, name, frame, cx - this.facing * 28, bottom, scale, -this.facing);
+            ctx.globalAlpha = alpha;
         }
         if (this.powers.gold > 0 && name === 'melee') {
             ctx.shadowColor = '#ffd700';
             ctx.shadowBlur = 18;
         } else if (this.ultTimer > 0) {
             // Aura de la ulti; parpadea los dos últimos segundos para avisar de que se acaba
-            ctx.shadowColor = this.ultTimer > 120 || Math.floor(this.ultTimer / 6) % 2 ? '#e53935' : '#1e88e5';
+            const [main, blink] = this.form.aura || ULT_AURA;
+            ctx.shadowColor = this.ultTimer > 120 || Math.floor(this.ultTimer / 6) % 2 ? main : blink;
             ctx.shadowBlur = 16;
         }
         sheet.draw(ctx, name, frame, cx, bottom, scale, this.facing);
@@ -403,6 +476,67 @@ class Player {
         }
 
         if (this.charge > 0) this.drawChargeMeter(ctx);
+        if (this.sensing && !this.dead) this.drawSpiderSense(ctx, cx);
+        if (this.ultTimer > 0 && this.form.drone && !this.dead) this.drawDrone(ctx);
+    }
+
+    // Dron de la ulti `drone`: cuerpo redondo con una luz que parpadea y dos hélices.
+    drawDrone(ctx) {
+        const { x, y } = this.dronePos;
+        const spin = Math.floor(this.tick / 2) % 2 ? 12 : 7;
+        ctx.save();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.fillStyle = '#cfd8dc';
+        for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(x + side * 6, y - 4);
+            ctx.lineTo(x + side * 14, y - 9);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(x + side * 14, y - 10, spin, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#263238';
+        ctx.beginPath();
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = Math.floor(this.tick / 15) % 2 ? '#00e5ff' : '#d500f9';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Rayitas en zigzag alrededor de la cabeza, como el sentido arácnido de los cómics; vibran.
+    drawSpiderSense(ctx, cx) {
+        const cy = this.y + 18;
+        const jitter = Math.floor(this.tick / 3) % 2 ? 2 : -2;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (const [color, width] of [['#000', 3.5], ['#ffeb3b', 1.5]]) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            for (let i = 0; i < 5; i++) {
+                const angle = -Math.PI * (0.15 + i * 0.175);
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                ctx.beginPath();
+                for (let s = 0; s <= 3; s++) {
+                    const r = 20 + s * 3;
+                    const side = (s % 2 ? 1 : -1) * (1.5 + jitter * 0.25);
+                    const x = cx + cos * r - sin * side;
+                    const y = cy + sin * r + cos * side;
+                    if (s === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
     }
 
     drawChargeMeter(ctx) {

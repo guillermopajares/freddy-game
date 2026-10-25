@@ -438,6 +438,172 @@ body::before {
     margin: 0 auto 4px;
 }
 
+/* Selección con vista previa: el elegido en grande a la izquierda, las tarjetas a la derecha (4 por fila) */
+#overlay-content.select {
+    max-width: 920px;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    column-gap: 24px;
+    align-items: center;
+    padding: 16px 24px;
+}
+
+#overlay-content.select > * {
+    grid-column: 1 / -1;
+}
+
+#overlay-content.select #overlay-title {
+    font-size: 44px;
+    margin-bottom: 6px;
+}
+
+#overlay-content.select #overlay-subtitle {
+    margin-bottom: 10px;
+}
+
+#overlay-content.select #overlay-divider {
+    margin: 4px auto 12px;
+}
+
+#overlay-content.select #overlay-text {
+    font-size: 15px;
+    margin-bottom: 10px;
+    animation: none;
+}
+
+#overlay-content.select #character-preview {
+    grid-column: 1;
+}
+
+#overlay-content.select #overlay-buttons {
+    grid-column: 2;
+    margin: 0;
+}
+
+#overlay-content.select button.character {
+    width: 104px;
+    padding: 4px;
+}
+
+#overlay-content.select button.character img {
+    height: 72px;
+}
+
+#character-preview {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 140, 66, 0.16), rgba(255, 255, 255, 0.04));
+    border: 2px solid rgba(255, 140, 66, 0.45);
+    text-align: left;
+}
+
+.preview-img {
+    display: block;
+    height: 190px;
+    max-width: 100%;
+    margin: 0 auto 6px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.6));
+    animation: bootBob 1.6s ease-in-out infinite;
+}
+
+.preview-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: #ffd700;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.preview-motto {
+    font-size: 13px;
+    color: #ccc;
+    text-align: center;
+    min-height: 34px;
+    margin-bottom: 8px;
+}
+
+.preview-stats {
+    list-style: none;
+}
+
+.preview-stats li {
+    display: grid;
+    grid-template-columns: 78px 1fr;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #ddd;
+    margin-bottom: 5px;
+}
+
+.preview-stats b {
+    height: 10px;
+    border-radius: 5px;
+    background: #2a2a2a;
+    overflow: hidden;
+}
+
+.preview-stats i {
+    display: block;
+    height: 100%;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #ff7a1a, #ffcc00);
+    transition: width 0.25s ease;
+}
+
+.preview-tags {
+    font-size: 12px;
+    color: #ff8c42;
+    text-align: center;
+    margin: 6px 0 10px;
+}
+
+#preview-play {
+    display: block;
+    width: 100%;
+    font-family: 'Fredoka One', sans-serif;
+    font-size: 18px;
+    color: #fff;
+    background: linear-gradient(180deg, #ff8c42 0%, #e85d26 100%);
+    border: 2px solid #ffb07a;
+    border-radius: 10px;
+    padding: 8px;
+    cursor: pointer;
+}
+
+/* Historia: la frase del personaje elegido, con su retrato, como un bocadillo */
+#overlay-quote {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 520px;
+    margin: -12px auto 24px;
+    padding: 10px 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border-left: 4px solid #ff8c42;
+    text-align: left;
+}
+
+#overlay-quote img {
+    height: 84px;
+    flex-shrink: 0;
+}
+
+#overlay-quote b {
+    display: block;
+    color: #ffd700;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+#overlay-quote q {
+    font-size: 17px;
+    color: #eee;
+    quotes: '«' '»';
+}
+
 #overlay-buttons button.secondary {
     background: #2a2a2a;
     border-color: #4a4a4a;
@@ -532,8 +698,9 @@ body::before {
     display: none;
 }
 
-/* Los mandos no tapan el juego: main.js deja bandas a los lados (horizontal, data-touch="landscape")
-   o sitio debajo (vertical, "portrait") y fija --btn (tamaño de botón) y --game-h (alto de la pantalla).
+/* main.js agranda el juego a todo el alto (horizontal, data-touch="landscape"; los mandos van a los lados
+   y, si no caben, encima del borde) o a todo el ancho con sitio debajo (vertical, "portrait") y fija --btn
+   (tamaño de botón) y --game-h (alto de la pantalla).
    El padding son las zonas seguras (muesca, barra de inicio): main.js lo lee para descontarlas. */
 @media (pointer: coarse) {
     html {
@@ -563,46 +730,119 @@ body::before {
         z-index: 50;
     }
 
-    /* Izquierda: ◀ ▶ y ▼ debajo. Derecha: 2x2 con el salto abajo a la derecha, bajo el pulgar. */
-    .touch-pad {
-        position: absolute;
-        bottom: calc(env(safe-area-inset-bottom) + 12px);
-        display: grid;
-        grid-template-columns: repeat(2, var(--btn, 60px));
-        gap: var(--gap);
+    /* Mandos de juego: solo mientras se juega (game.js pone .playing en <html>); en los menús se toca la pantalla */
+    html:not(.playing) .touch-stick,
+    html:not(.playing) .touch-pad,
+    html:not(.playing) #touch-pause,
+    html:not(.playing) #touch-ultimate {
+        display: none;
     }
 
-    .touch-pad:first-child {
-        left: calc(env(safe-area-inset-left) + 12px);
-    }
-
-    .touch-pad:nth-child(2) {
-        right: calc(env(safe-area-inset-right) + 12px);
-    }
-
-    .touch-pad [data-action="down"] {
-        grid-row: 2;
-        grid-column: 1 / 3;
-        justify-self: center;
-    }
-
+    /* Botones semitransparentes: en móviles poco alargados se montan sobre los bordes del juego */
     #touch-controls button {
         pointer-events: auto;
         width: var(--btn, 60px);
         height: var(--btn, 60px);
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.35);
-        background: rgba(0, 0, 0, 0.35);
+        border: 3px solid var(--ring, rgba(255, 255, 255, 0.4));
+        background: radial-gradient(circle at 50% 35%, var(--fill, rgba(255, 255, 255, 0.12)), rgba(0, 0, 0, 0.35) 70%);
         color: #fff;
-        font-size: calc(var(--btn, 60px) * 0.4);
+        font-size: calc(var(--btn, 60px) * 0.36);
+        line-height: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+        transition: transform 0.06s, filter 0.06s;
     }
 
-    #touch-controls button.big {
-        border-color: rgba(255, 140, 66, 0.8);
+    #touch-controls button span {
+        font-family: 'Fredoka One', sans-serif;
+        font-size: max(9px, calc(var(--btn, 60px) * 0.15));
+        letter-spacing: 0.5px;
+        opacity: 0.85;
     }
 
     #touch-controls button:active {
-        background: rgba(255, 140, 66, 0.5);
+        transform: scale(0.92);
+        filter: brightness(1.6);
+    }
+
+    /* Colores de los botones del mueble: salto rojo, papel blanco, golpe amarillo, dash azul */
+    #touch-controls .red { --ring: rgba(229, 57, 53, 0.9); --fill: rgba(229, 57, 53, 0.45); }
+    #touch-controls .white { --ring: rgba(240, 240, 240, 0.85); --fill: rgba(240, 240, 240, 0.3); }
+    #touch-controls .yellow { --ring: rgba(255, 202, 40, 0.9); --fill: rgba(255, 202, 40, 0.4); }
+    #touch-controls .blue { --ring: rgba(66, 165, 245, 0.9); --fill: rgba(66, 165, 245, 0.4); }
+
+    /* Palanca a la izquierda (input.js): el pomo sigue al dedo */
+    .touch-stick {
+        position: absolute;
+        left: calc(env(safe-area-inset-left) + 14px);
+        bottom: calc(env(safe-area-inset-bottom) + 14px);
+        width: calc(var(--btn, 60px) * 2.4);
+        height: calc(var(--btn, 60px) * 2.4);
+        border-radius: 50%;
+        pointer-events: auto;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        background:
+            radial-gradient(circle, transparent 58%, rgba(255, 255, 255, 0.06) 59%),
+            rgba(0, 0, 0, 0.2); /* clarito: en móviles poco alargados pisa el borde del juego */
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Flechas pintadas en el aro: izquierda, derecha y abajo */
+    .touch-stick::before {
+        content: '◀            ▶';
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        white-space: pre;
+        color: rgba(255, 255, 255, 0.45);
+        font-size: calc(var(--btn, 60px) * 0.26);
+    }
+
+    .touch-stick::after {
+        content: '▼';
+        position: absolute;
+        left: 50%;
+        bottom: 6%;
+        transform: translateX(-50%);
+        color: rgba(255, 255, 255, 0.45);
+        font-size: calc(var(--btn, 60px) * 0.26);
+    }
+
+    .touch-knob {
+        position: absolute;
+        left: 30%;
+        top: 30%;
+        width: 40%;
+        height: 40%;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 35%, #ffb07a, #e85d26 65%, #9c3a10);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55), inset 0 -3px 6px rgba(0, 0, 0, 0.3);
+        pointer-events: none;
+    }
+
+    /* Derecha: dash y papel arriba; golpe y salto (más grande, bajo el pulgar) abajo */
+    .touch-pad {
+        position: absolute;
+        right: calc(env(safe-area-inset-right) + 14px);
+        bottom: calc(env(safe-area-inset-bottom) + 14px);
+        display: grid;
+        grid-template-columns: var(--btn, 60px) calc(var(--btn, 60px) * 1.3);
+        align-items: end;
+        justify-items: center;
+        gap: var(--gap);
+    }
+
+    #touch-controls .touch-pad .big {
+        width: calc(var(--btn, 60px) * 1.3);
+        height: calc(var(--btn, 60px) * 1.3);
+        font-size: calc(var(--btn, 60px) * 0.45);
     }
 
     #touch-pause, #touch-fullscreen {
@@ -617,23 +857,29 @@ body::before {
         right: calc(env(safe-area-inset-right) + 12px);
     }
 
-    /* Ulti: encima de los botones de acción, centrado sobre ellos */
+    #touch-fullscreen {
+        left: calc(env(safe-area-inset-left) + 12px);
+    }
+
+    /* Ulti: encima de los botones de acción */
     #touch-ultimate {
         position: absolute;
-        right: calc(env(safe-area-inset-right) + 12px + var(--btn, 60px) + var(--gap) / 2);
-        bottom: calc(env(safe-area-inset-bottom) + 12px + var(--btn, 60px) * 2 + var(--gap) * 2);
+        right: calc(env(safe-area-inset-right) + 14px + var(--btn, 60px) * 0.65);
+        bottom: calc(env(safe-area-inset-bottom) + 14px + var(--btn, 60px) * 2.3 + var(--gap) * 2);
         transform: translateX(50%);
         opacity: 0.45;
+        --ring: rgba(229, 57, 53, 0.6);
     }
 
     #touch-ultimate.ready {
         opacity: 1;
-        border-color: #e53935;
+        --ring: #e53935;
+        --fill: rgba(229, 57, 53, 0.6);
         box-shadow: 0 0 14px #e53935;
     }
 
-    #touch-fullscreen {
-        left: calc(env(safe-area-inset-left) + 12px);
+    #touch-ultimate:active {
+        transform: translateX(50%) scale(0.92);
     }
 
     #rotate-hint {
@@ -646,19 +892,11 @@ body::before {
         left: 50%;
         right: auto;
         transform: translateX(-50%);
-        bottom: calc(env(safe-area-inset-bottom) + 12px);
+        bottom: calc(env(safe-area-inset-bottom) + 14px);
     }
 
     [data-touch="portrait"] #touch-fullscreen {
-        bottom: calc(env(safe-area-inset-bottom) + 66px);
-    }
-
-    [data-touch="portrait"] #touch-ultimate {
-        right: 50%;
-        bottom: calc(env(safe-area-inset-bottom) + 120px);
-        width: 44px;
-        height: 44px;
-        font-size: 18px;
+        bottom: calc(env(safe-area-inset-bottom) + 68px);
     }
 
     [data-touch="portrait"] #rotate-hint {

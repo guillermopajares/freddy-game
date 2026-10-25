@@ -26,6 +26,12 @@ describe('Progress', () => {
         expect(p.settings).toMatchObject({ shake: false, flash: true, volume: 70 });
     });
 
+    test('los ajustes iniciales del dispositivo valen hasta que se guarda otro', () => {
+        expect(new Progress(memoryStorage(), { difficulty: 'easy' }).settings.difficulty).toBe('easy');
+        const saved = memoryStorage({ freddyProgress: JSON.stringify({ settings: { difficulty: 'hard' } }) });
+        expect(new Progress(saved, { difficulty: 'easy' }).settings.difficulty).toBe('hard');
+    });
+
     test('un logro solo se desbloquea una vez y se persiste', () => {
         const storage = memoryStorage();
         const p = new Progress(storage);

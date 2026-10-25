@@ -46,6 +46,7 @@ class InputHandler {
                 e.preventDefault();
                 if (!this.touch[action]) this.justPressed[action] = true;
                 this.touch[action] = true;
+                if (navigator.vibrate) navigator.vibrate(8); // respuesta al tacto (solo Android)
                 // La captura hace que soltar el dedo fuera del botón también cuente como soltar
                 try { btn.setPointerCapture(e.pointerId); } catch (err) { /* puntero ya liberado */ }
             });
@@ -54,6 +55,49 @@ class InputHandler {
             btn.addEventListener('pointercancel', release);
             btn.addEventListener('lostpointercapture', release);
         });
+
+        // Palanca táctil: con botones sueltos había que levantar el dedo para cambiar de sentido.
+        // Aquí cuenta la posición del dedo respecto al centro, y se puede arrastrar sin soltar.
+        const stick = document.querySelector('#touch-controls [data-stick]');
+        if (stick) {
+            const knob = stick.querySelector('.touch-knob');
+            const move = (e) => {
+                const r = stick.getBoundingClientRect();
+                const radius = r.width / 2;
+                let dx = (e.clientX - r.left - radius) / radius;
+                let dy = (e.clientY - r.top - radius) / radius;
+                const len = Math.hypot(dx, dy);
+                if (len > 1) { dx /= len; dy /= len; }
+                // Zona muerta pequeña en el centro; abajo pide más recorrido para no agacharse sin querer
+                this.setTouch('left', dx < -0.3);
+                this.setTouch('right', dx > 0.3);
+                this.setTouch('down', dy > 0.6);
+                knob.style.transform = `translate(${dx * radius * 0.6}px, ${dy * radius * 0.6}px)`;
+            };
+            let pointer = null; // dedo que maneja la palanca (la captura puede fallar, ver CLAUDE.md)
+            const release = () => {
+                pointer = null;
+                ['left', 'right', 'down'].forEach(a => this.setTouch(a, false));
+                knob.style.transform = '';
+            };
+            stick.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                pointer = e.pointerId;
+                move(e);
+                try { stick.setPointerCapture(e.pointerId); } catch (err) { /* puntero ya liberado */ }
+            });
+            stick.addEventListener('pointermove', (e) => {
+                if (e.pointerId === pointer) move(e);
+            });
+            stick.addEventListener('pointerup', release);
+            stick.addEventListener('pointercancel', release);
+            stick.addEventListener('lostpointercapture', release);
+        }
+    }
+
+    setTouch(action, down) {
+        if (down && !this.touch[action]) this.justPressed[action] = true;
+        this.touch[action] = down;
     }
 
     // Mando estándar: A salta, X papel, B desatascador, Y ulti, gatillos dash, Start pausa/confirma.
