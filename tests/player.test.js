@@ -320,3 +320,85 @@ describe('Ulti', () => {
         expect(dani.form.car).toBe(true);
     });
 });
+
+describe('Ultis de cada personaje', () => {
+    const level = { platforms: [GROUND], width: 960, leftWall: 0 };
+    global.FREDDY_FRAMES = {}; // characters.js lo usa al cargar; aquí solo importan las stats
+    const CHARACTERS = require('../js/characters.js');
+
+    // Personaje en el suelo con la ulti recién activada
+    function transform(character) {
+        const input = makeInput();
+        const p = new Player(100, 650 - 108, { character });
+        run(p, input, 2, level);
+        p.addUltimate(Player.ULT_MAX);
+        input.pressed.add('ultimate');
+        run(p, input, 1, level);
+        return { p, input };
+    }
+
+    test('todos los personajes tienen ulti', () => {
+        for (const c of Object.values(CHARACTERS)) expect(c.ultimate).toBeDefined();
+    });
+
+    test('Freddy: dorado, triple y papel sin gastar', () => {
+        const { p, input } = transform(CHARACTERS.freddy);
+        expect(p.powers.gold).toBeGreaterThan(0);
+        expect(p.powers.triple).toBeGreaterThan(0);
+        p.ammo = 0;
+        input.pressed.add('fire');
+        run(p, input, 1, level); // pulsar y soltar: lanza
+        expect(p.projectiles.length).toBe(3);
+        expect(p.ammo).toBe(0);
+    });
+
+    test('Fer: el golpe alcanza por delante y por detrás', () => {
+        const { p, input } = transform(CHARACTERS.fer);
+        input.pressed.add('melee');
+        run(p, input, 8, level);
+        const b = p.getMeleeBounds();
+        expect(b.x).toBeLessThan(p.x - 50);
+        expect(b.x + b.width).toBeGreaterThan(p.x + p.width + 50);
+    });
+
+    test('Guille: un golpe le devuelve atrás sin quitarle vida', () => {
+        const { p, input } = transform(CHARACTERS.guille);
+        const startX = p.x;
+        input.down.add('right');
+        run(p, input, 60, level);
+        const lives = p.lives;
+        expect(p.takeDamage(1, p.x + 50)).toBe(false);
+        expect(p.reverted).toBe(true);
+        expect(p.lives).toBe(lives);
+        expect(p.x).toBeLessThan(startX + 20);
+    });
+
+    test('Álvaro: el escudo se recarga', () => {
+        const { p, input } = transform(CHARACTERS.alvaro);
+        expect(p.shield).toBe(true);
+        p.takeDamage(1, p.x + 50);
+        expect(p.shield).toBe(false);
+        run(p, input, 125, level);
+        expect(p.shield).toBe(true);
+    });
+
+    test('Tony: el dash golpea y casi no espera', () => {
+        const { p, input } = transform(CHARACTERS.tony);
+        input.pressed.add('dash');
+        run(p, input, 1, level);
+        expect(p.ramming).toBe(true);
+        expect(p.dashCooldown).toBeLessThanOrEqual(16);
+    });
+
+    test('Elena: saltos sin límite que se acaban con la ulti', () => {
+        const { p, input } = transform(CHARACTERS.elena);
+        expect(p.maxJumps).toBeGreaterThan(10);
+        input.pressed.add('jump');
+        run(p, input, 1, level);
+        p.y = 100; // en el aire cuando se acaba
+        p.ultTimer = 1;
+        run(p, input, 1, level);
+        expect(p.maxJumps).toBe(3);
+        expect(p.jumpsLeft).toBeLessThanOrEqual(3);
+    });
+});

@@ -2,6 +2,11 @@ const STEP = 1000 / 60; // la física va a 60 Hz aunque la pantalla refresque a 
 const STAR_TYPES = new Set(['coin', 'star', 'heart']); // lo que cuenta para las estrellas del nivel
 const POWER_TYPES = new Set(['triple', 'gold', 'shield']);
 const ELITE_TINT = 'rgba(220, 0, 60, 0.35)';
+// Ultis (ver CHARACTERS): jefes quietos los primeros 4 s de `freeze`, un disparo del dron cada medio segundo,
+// radio del imán.
+const FREEZE_BOSS = 240;
+const DRONE_RATE = 30;
+const MAGNET_RANGE = 450;
 const BACKGROUNDS = ['bg_00', 'bg_01', 'bg_02', 'bg_03', 'bg_04', 'bg_05'];
 const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
 const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -954,8 +959,18 @@ class Game {
             this.triggerScreenShake(10);
             this.triggerFlash();
             if (ult.tests) this.runTests();
+            if (ult.redesign) this.redesign();
         }
-        this.enemies.forEach(e => e.update(player, level, this));
+        const ult = player.ultTimer > 0 ? player.form : {};
+        if (ult.freeze) {
+            // Reunión urgente: nadie se mueve; los jefes solo los primeros segundos
+            const bosses = player.ultTimer > ULT_TIME - FREEZE_BOSS;
+            this.enemies.forEach(e => { if (!e.isBoss || bosses) e.stun = Math.max(e.stun, 2); });
+        }
+        // Bullet time: el mundo enemigo va a medio ritmo
+        const enemyTurn = !ult.slowmo || this.levelTime % 2 === 0;
+        if (enemyTurn) this.enemies.forEach(e => e.update(player, level, this));
+        this.updateUltimate(ult);
         // Sentido arácnido: avisa (con un pitido al empezar) si hay un bug cerca
         if (player.character.spiderSense) {
             const px = player.x + player.width / 2;
@@ -964,11 +979,17 @@ class Game {
             if (sensing && !player.sensing) Sound.play('spiderSense');
             player.sensing = sensing;
         }
-        this.enemyProjectiles.forEach(p => p.update());
+        if (enemyTurn) this.enemyProjectiles.forEach(p => p.update());
         this.collectibles.forEach(c => c.update());
 
         this.handlePlayerAttacks();
         this.handleDamageToPlayer();
+        if (player.reverted) {
+            const cx = player.x + player.width / 2;
+            this.spawnParticles(cx, player.y + player.height / 2, '#f4511e', 16, 12);
+            this.spawnText(cx, player.y - 20, 'GIT REVERT');
+            this.triggerFlash();
+        }
         this.handleCollectibles();
         this.handleCheckpoints();
         this.updateFlood();
@@ -1055,9 +1076,67 @@ class Game {
         });
     }
 
+    // Efectos de la ulti que tocan el mundo mientras dura (ult = player.form, o {} sin ulti).
+    updateUltimate(ult) {
+        const player = this.player;
+        if (player.dead) return;
+        const px = player.x + player.width / 2;
+        const py = player.y + player.height / 2;
+        if (ult.drone && player.ultTimer % DRONE_RATE === 0) {
+            // El dron dispara al bug más cercano a la vista
+            const drone = player.dronePos;
+            const target = this.visibleEnemies()
+                .map(e => ({ e, dx: e.x + e.width / 2 - drone.x, dy: e.y + e.height / 2 - drone.y }))
+                .sort((a, b) => Math.hypot(a.dx, a.dy) - Math.hypot(b.dx, b.dy))[0];
+            if (target) {
+                const dist = Math.hypot(target.dx, target.dy) || 1;
+                const size = PROJECTILE_TYPES.paper.width;
+                player.projectiles.push(new Projectile(drone.x - size / 2, drone.y - size / 2, target.dx / dist, 'paper',
+                    target.dy / dist * PROJECTILE_TYPES.paper.speed));
+                Sound.play('throw');
+            }
+        }
+        if (ult.magnet) {
+            // Monedas y objetos vuelan hacia él (el veneno no)
+            this.collectibles.forEach(c => {
+                if (c.collected || c.type === 'poison') return;
+                const dx = px - (c.x + c.width / 2);
+                const dy = py - (c.y + c.height / 2);
+                const dist = Math.hypot(dx, dy);
+                if (dist > MAGNET_RANGE || dist < 1) return;
+                const step = Math.min(dist, 7);
+                c.x += dx / dist * step;
+                c.y += dy / dist * step;
+            });
+        }
+    }
+
+    visibleEnemies() {
+        return this.enemies.filter(e => !e.dying && e.x + e.width > this.camX && e.x < this.camX + 960);
+    }
+
+    // Ulti de Elena: los bugs a la vista pasan a monedas; los jefes no se dejan, pero se llevan un golpe.
+    redesign() {
+        for (const e of this.visibleEnemies()) {
+            const cx = e.x + e.width / 2;
+            const cy = e.y + e.height / 2;
+            if (e.isBoss) {
+                this.hitEnemy(e, 4, '#ec407a', this.player.x + this.player.width / 2);
+                continue;
+            }
+            e.markedForDeletion = true;
+            this.spawnParticles(cx, cy, '#ec407a', 14, 10);
+            this.spawnParticles(cx, cy, '#ffd54f', 14, 10);
+            const coin = new Collectible(cx - 14, cy - 14, 'coin');
+            coin.dropped = true; // no cuenta para las estrellas del nivel
+            this.collectibles.push(coin);
+            if (e.carrying) this.collectibles.push(new Collectible(cx + 16, cy - 14, 'paper'));
+        }
+    }
+
     // Ulti de Rober: un assert contra cada bug en pantalla. Los normales caen; los jefes se llevan un buen golpe.
     runTests() {
-        const visible = this.enemies.filter(e => !e.dying && e.x + e.width > this.camX && e.x < this.camX + 960);
+        const visible = this.visibleEnemies();
         for (const e of visible) {
             this.spawnText(e.x + e.width / 2, e.y - 20, '✔ PASS');
             this.hitEnemy(e, e.isBoss ? 6 : 99, '#43a047', this.player.x + this.player.width / 2);
@@ -1439,6 +1518,7 @@ class Game {
                 this.scenery.drawShadows(ctx, grounded, this.level.platforms);
                 this.collectibles.forEach(c => c.draw(ctx, this.itemSheet));
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
+                if (this.player.ultTimer > 0 && this.player.form.freeze) this.drawFrozen(ctx);
                 this.enemyProjectiles.forEach(p => p.draw(ctx, this.itemSheet));
                 this.drawPlayer(ctx);
                 if (this.speech) this.drawSpeech(ctx, camX);
@@ -1447,6 +1527,11 @@ class Game {
             this.particles.forEach(p => p.draw(ctx));
             ctx.restore();
             this.scenery.drawForeground(ctx);
+            if (this.player && this.player.ultTimer > 0 && this.player.form.slowmo) {
+                // Bullet time: tinte verde de pantalla
+                ctx.fillStyle = 'rgba(60, 255, 120, 0.08)';
+                ctx.fillRect(-10, -10, 980, 740);
+            }
 
             if (this.flashAlpha > 0) {
                 ctx.globalAlpha = this.flashAlpha;
@@ -1556,6 +1641,18 @@ class Game {
         ctx.fillStyle = '#ffeb3b';
         ctx.strokeText(this.banner.text, 480, 300);
         ctx.fillText(this.banner.text, 480, 300);
+        ctx.restore();
+    }
+
+    // Ulti de Charly: los enemigos parados en la reunión llevan un 💤 encima.
+    drawFrozen(ctx) {
+        ctx.save();
+        ctx.font = '34px sans-serif';
+        ctx.textAlign = 'center';
+        const bob = Math.sin(this.levelTime / 12) * 4;
+        this.enemies.forEach(e => {
+            if (!e.dying && e.stun > 0) ctx.fillText('💤', e.x + e.width / 2 + 14, e.y - 22 + bob);
+        });
         ctx.restore();
     }
 

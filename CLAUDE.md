@@ -101,11 +101,14 @@ Detalles clave:
   el salto de cada personaje que llega a todo. La selección muestra al elegido en grande con barras
   (`characterStats` en `game.js`, calculadas de los mismos campos que usa `Player`) y cuatro tarjetas por fila: tocar una
   la previsualiza, tocarla otra vez o «¡A jugar!» la elige.
-- **Ulti:** un personaje con `ultimate` en `CHARACTERS` (Dani → traje de araña, sin nombre en pantalla; Rober → «Todo en verde») llena una barra matando enemigos y
-  cogiendo monedas/estrellas; con ella llena, `ultimate` (I/V, Y del mando, botón ⚡) lo transforma `ULT_TIME` frames.
-  `Player.form` = personaje con la ulti encima: leer de ahí `punch/reach/car/dash`, no de `character`. La hoja de la
-  ulti va en `game.ultSheets` (no en `sheets`: no es elegible ni rival). Sin `sheet` se queda con su hoja y cambia el
-  `aura`; con `tests` (Rober) al activarla golpea a todo lo que hay en pantalla (`Game.runTests`).
+- **Ulti:** todos los personajes tienen `ultimate` en `CHARACTERS`; llenan una barra matando enemigos y
+  cogiendo monedas/estrellas, y con ella llena `ultimate` (I/V, Y del mando, botón ⚡) los transforma `ULT_TIME` frames.
+  `Player.form` = personaje con la ulti encima: leer de ahí `punch/reach/car/dash` y los efectos, no de `character`.
+  Cada efecto es un campo (lista en el comentario de `CHARACTERS`): los del propio jugador (`freeAmmo`, `mirror`,
+  `revert`, `shieldRegen`, `dashHit`...) en `Player.updateUltimate`/`takeDamage`/`getMeleeBounds`; los que tocan el
+  mundo (`tests`, `redesign` al activarla; `freeze`, `slowmo`, `drone`, `magnet` mientras dura) en `Game`
+  (`runTests`, `redesign`, `updateUltimate`). Solo Dani tiene hoja propia (`game.ultSheets`, no en `sheets`); el resto
+  cambia el `aura`. Sin `name` no sale cartel. No nombrar «Spider Dani» en pantalla.
   Dani tiene además `spiderSense`: rayitas sobre la cabeza y un pitido con un bug cerca (`player.sensing`).
 - **Frases de personaje** (`js/story.js`): `motto` en la selección, `levels` antes de cada nivel, `ending` y `rival`
   (bocadillo al aparecer como jefe rival; `{player}` = nombre de quien juega). Un test exige `rival` en todos.
