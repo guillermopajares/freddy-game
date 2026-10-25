@@ -38,6 +38,7 @@ class Player {
         this.shield = false;
 
         this.invincibleTimer = 0;
+        this.mercy = stats.mercy ?? 1; // invencibilidad tras un golpe más larga en Fácil (DIFFICULTY.mercy)
         this.crouching = false;
         this.dashTimer = 0;
         this.dashCooldown = 0;
@@ -321,7 +322,7 @@ class Player {
 
         this.lives = Math.max(0, this.lives - amount);
         this.hitsTaken++;
-        this.invincibleTimer = heavy ? 110 : 90;
+        this.invincibleTimer = Math.round((heavy ? 110 : 90) * this.mercy);
         this.action = heavy ? { name: 'downed', timer: 50, duration: 50 } : { name: 'hurt', timer: 24, duration: 24 };
         this.velocityX = dir * (heavy ? 3 : 5);
         this.velocityY = heavy ? -4 : -6;

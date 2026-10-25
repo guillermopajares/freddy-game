@@ -36,7 +36,7 @@ Scripts clásicos cargados en orden desde `index.html`; todo son globales (`clas
 | `js/player.js` | Freddy: física, ataques, poderes, daño |
 | `js/scenery.js` | Decorado de David: fondo con parallax, plataformas con relieve, sombras, puerta |
 | `js/level.js` | Clase `Level` + datos de los 5 niveles (formato compacto, ver `docs/levels.md`) |
-| `js/story.js` | Textos de historia entre niveles |
+| `js/story.js` | Historia entre niveles (`STORY`) y, por personaje, lema, frase por nivel y final (`CHARACTER_STORY`) |
 | `js/progress.js` | Guardado (localStorage), ajustes, dificultad, logros, ranking local. Sin DOM: testeable |
 | `js/api.js` | Cliente del ranking online (`RankingApi`, contrato en `api.md`). Sin DOM: testeable |
 | `js/game.js` | Bucle, estados, cámara, combate, jefes, riada, menús HTML |
@@ -96,8 +96,11 @@ Detalles clave:
   verde: se convirtió a verde croma una vez. Las hojas de personajes (todas menos Freddy) usan `keepLargest` para
   borrar trozos de frames vecinos y `seeThrough` para el verde encerrado entre brazo y cuerpo.
 - **Nuevo personaje:** hoja en `art/` → copiarla a `assets/<id>.jpg`, entrada en `ASSET_FILES`, frames y entrada en
-  `CHARACTERS` (`js/characters.js`), `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
-  el salto de cada personaje que llega a todo. La selección muestra cinco por fila (`button.character`).
+  `CHARACTERS` (`js/characters.js`), su historia en `CHARACTER_STORY` (`js/story.js`; un test exige una frase por nivel),
+  `node tools/build-assets.js`. `tests/levels.test.js` comprueba con la velocidad y
+  el salto de cada personaje que llega a todo. La selección muestra al elegido en grande con barras
+  (`characterStats` en `game.js`, calculadas de los mismos campos que usa `Player`) y cuatro tarjetas por fila: tocar una
+  la previsualiza, tocarla otra vez o «¡A jugar!» la elige.
 - **Ulti:** un personaje con `ultimate` en `CHARACTERS` (hoy Dani → Spider Dani) llena una barra matando enemigos y
   cogiendo monedas/estrellas; con ella llena, `ultimate` (I/V, Y del mando, botón ⚡) lo transforma `ULT_TIME` frames.
   `Player.form` = personaje con la ulti encima: leer de ahí `punch/reach/car/dash`, no de `character`. La hoja de la
@@ -107,6 +110,10 @@ Detalles clave:
 - **Mueble de recreativa:** `main.js` (`fit`) pone `data-cabinet="full|compact|off"` en `<html>` según el ajuste
   `cabinet` y el tamaño de la ventana (táctil: siempre `off`), y `no-crt` si se quita el efecto del cristal. Cada modo
   tiene su tamaño lógico en `SIZES`; si se añade algo al mueble que cambie su alto, actualizarlo ahí.
+- **Táctil:** el juego ocupa todo el alto en horizontal (los mandos, semitransparentes, pisan el borde si no caben) y todo
+  el ancho en vertical (`touchScale` en `main.js`). Moverse es una palanca (`data-stick`, `input.js`) que se arrastra sin
+  levantar el dedo. Los mandos de juego solo se ven con `<html class="playing">` (lo pone `game.js`). En táctil se
+  empieza en Fácil (`new Progress(storage, defaults)`), pensada para el móvil: `mercy` y `hearts` en `DIFFICULTY`.
 - **`localStorage` puede lanzar** (modo privado): todo el guardado pasa por `Progress`, que lo tolera.
 - **El ranking online es producción**: no enviar puntuaciones de prueba a `API_URL`. En tests se simula `fetch`;
   en el navegador, interceptar `**/api/**` con Playwright. Si la API falla se muestra el ranking local.

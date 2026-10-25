@@ -113,6 +113,14 @@ describe('Player', () => {
         expect(player.hitsTaken).toBe(1);
     });
 
+    test('en Fácil (mercy) la invencibilidad tras un golpe dura más', () => {
+        expect(player.takeDamage(1, 0)).toBe(true);
+        const normal = player.invincibleTimer;
+        const easy = new Player(100, 542, { mercy: 1.6 });
+        expect(easy.takeDamage(1, 0)).toBe(true);
+        expect(easy.invincibleTimer).toBe(Math.round(normal * 1.6));
+    });
+
     test('caer al vacío quita una vida y reaparece en el checkpoint', () => {
         // Freddy está sobre el vacío; el checkpoint tiene suelo debajo
         level.platforms = [{ x: 250, y: 650, width: 200, height: 70 }];

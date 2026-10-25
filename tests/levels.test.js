@@ -78,3 +78,19 @@ describe.each(levels.map(l => [l.name, l]))('%s', (name, level) => {
         expect(level.exitX).toBeGreaterThan(level.boss.arenaX);
     });
 });
+
+describe('Historia', () => {
+    const { STORY, CHARACTER_STORY } = require('../js/story.js');
+
+    test('hay texto para cada nivel y, por personaje, lema, frase por nivel y final', () => {
+        expect(STORY).toHaveLength(levels.length);
+        for (const id of Object.keys(CHARACTERS)) {
+            const lore = CHARACTER_STORY[id];
+            expect(lore).toBeDefined();
+            expect(lore.motto).toBeTruthy();
+            expect(lore.ending).toBeTruthy();
+            expect(lore.levels).toHaveLength(levels.length);
+            lore.levels.forEach(line => expect(line).toBeTruthy());
+        }
+    });
+});

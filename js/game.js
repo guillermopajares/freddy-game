@@ -29,6 +29,20 @@ function formatTime(seconds) {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// Barras de la selección (0-1). Se calculan de los mismos campos que usa Player, para que el panel
+// no mienta: velocidad, altura de salto (crece con el cuadrado del impulso), daño y alcance del golpe.
+function characterStats(c) {
+    const speed = c.speed ?? 3.5;
+    const jump = (c.jumpForce ?? -12) ** 2;
+    const bar = (v, min, max) => Math.max(0.08, Math.min(1, (v - min) / (max - min)));
+    return [
+        ['Velocidad', bar(speed, 2.2, 4.6)],
+        ['Salto', bar(jump + ((c.jumps ?? 2) - 2) * 40, 100, 196)],
+        ['Fuerza', bar(2 + (c.punch || 0), 0, 4)],
+        ['Alcance', bar(75 + (c.reach || 0), 40, 115)],
+    ];
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -38,7 +52,7 @@ class Game {
         this.input = new InputHandler();
         this.backgrounds = {};
         this.scenery = new Scenery(this.backgrounds);
-        this.progress = new Progress(safeStorage());
+        this.progress = new Progress(safeStorage(), IS_TOUCH ? { difficulty: 'easy' } : {});
         this.state = 'loading';
         this.currentLevel = 0;
         this.player = null;
@@ -76,6 +90,12 @@ class Game {
         this.overlayStars = $('overlay-stars');
         this.overlayScore = $('overlay-score');
         this.overlayButtons = $('overlay-buttons');
+        this.overlayContent = $('overlay-content');
+        this.overlayQuote = $('overlay-quote');
+        this.characterPreview = $('character-preview');
+        const play = $('preview-play');
+        play.addEventListener('pointerdown', e => e.preventDefault()); // sin foco, como los del overlay
+        play.addEventListener('click', () => this.selectCharacter(this.character));
         this.panels = $('panels');
         this.nameEntry = $('name-entry');
         this.nameInput = $('name-input');
@@ -322,8 +342,18 @@ class Game {
 
     // --- Pantallas (overlay HTML) ----------------------------------------------------
 
-    showOverlay({ titleClass = '', title, subtitle = null, text = '', score = '', buttons = [], panels = false }) {
+    // quote: frase del personaje elegido (con su retrato); preview: id del personaje a mostrar en grande.
+    showOverlay({ titleClass = '', title, subtitle = null, text = '', quote = '', preview = null, score = '', buttons = [], panels = false }) {
         this.overlay.classList.remove('hidden');
+        this.overlayContent.classList.toggle('select', !!preview);
+        this.characterPreview.hidden = !preview;
+        if (preview) this.renderPreview(preview);
+        this.overlayQuote.hidden = !quote;
+        if (quote) {
+            this.overlayQuote.querySelector('img').src = this.portraits[this.character] || BLANK_IMG;
+            this.overlayQuote.querySelector('b').textContent = CHARACTERS[this.character].name;
+            this.overlayQuote.querySelector('q').textContent = quote;
+        }
         this.overlayTitle.className = titleClass;
         this.overlayTitle.textContent = title;
         this.overlaySubtitle.hidden = !subtitle;
@@ -512,29 +542,63 @@ class Game {
             subtitle: 'Desatasca el código',
             text: IS_TOUCH ? 'Toca Jugar para empezar' : `↑↓ elegir · ESPACIO aceptar${playable > 1 ? ` · 1-${playable}: nivel` : ''}`,
             score: highScore ? `Récord: ${highScore}` : '',
-            buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons],
+            buttons: [{ label: 'Jugar', action: () => this.newGame(0) }, ...levelButtons, {
+                label: `Dificultad: ${this.progress.difficulty.label}`, secondary: true, action: () => this.cycleDifficulty(),
+            }],
             panels: true,
         });
     }
 
-    // Elegir personaje; los demás aparecen como jefes rivales.
+    // Botón del menú: pasa a la siguiente dificultad y lo refleja en el desplegable de Ajustes.
+    cycleDifficulty() {
+        const ids = Object.keys(DIFFICULTY);
+        const s = this.progress.settings;
+        s.difficulty = ids[(ids.indexOf(s.difficulty) + 1) % ids.length];
+        this.difficultySelect.value = s.difficulty;
+        this.progress.save();
+        this.showMenu();
+        this.select(this.overlayButtons.lastElementChild);
+    }
+
+    // Elegir personaje; los demás aparecen como jefes rivales. Tocar una tarjeta lo muestra en grande
+    // con sus estadísticas; tocarla otra vez (o ENTER, o "¡A jugar!") lo elige.
     newGame(levelIndex) {
         this.state = 'select';
         this.pendingLevel = { index: levelIndex };
-        // Con diez personajes la habilidad no cabe en la tarjeta: se muestra la del seleccionado
-        const chosen = CHARACTERS[this.character];
         this.showOverlay({
             title: 'ELIGE PERSONAJE',
             subtitle: 'LOS DEMÁS SERÁN TUS RIVALES',
-            text: `${chosen.name}: ${chosen.desc}` + (IS_TOUCH ? '' : ' · ◀ ▶ y ENTER para elegir'),
+            text: IS_TOUCH ? '' : '◀ ▶ elegir · ENTER jugar',
+            preview: this.character,
             buttons: Object.entries(CHARACTERS).map(([id, c]) => ({
                 label: c.name,
                 img: this.portraits[id] || BLANK_IMG, // hoja aún sin llegar: hueco del mismo alto
                 secondary: id !== this.character,
-                action: () => this.selectCharacter(id),
+                action: () => (id === this.character ? this.selectCharacter(id) : this.previewCharacter(id)),
             })),
         });
         this.select(this.overlayButtons.children[Object.keys(CHARACTERS).indexOf(this.character)]);
+    }
+
+    previewCharacter(id) {
+        this.progress.settings.character = id;
+        this.loadSheet(id); // al llegar su hoja se vuelve a pintar la selección con el retrato
+        this.newGame(this.pendingLevel.index);
+    }
+
+    // Panel del personaje: retrato grande, lema y barras comparadas con el resto.
+    renderPreview(id) {
+        const c = CHARACTERS[id];
+        const box = this.characterPreview;
+        box.querySelector('.preview-img').src = this.portraits[id] || BLANK_IMG;
+        box.querySelector('.preview-name').textContent = c.name;
+        box.querySelector('.preview-motto').textContent = CHARACTER_STORY[id] ? CHARACTER_STORY[id].motto : c.desc;
+        box.querySelector('.preview-stats').replaceChildren(...characterStats(c).map(([label, value]) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${label}</span><b><i style="width: ${Math.round(value * 100)}%"></i></b>`;
+            return li;
+        }));
+        box.querySelector('.preview-tags').textContent = c.desc;
     }
 
     get character() {
@@ -559,10 +623,12 @@ class Game {
     showStory(index, stats) {
         this.state = 'story';
         this.pendingLevel = { index, stats };
+        const lore = CHARACTER_STORY[this.character];
         this.showOverlay({
             titleClass: 'level-complete-title',
             title: levels[index].name.toUpperCase(),
             text: STORY[index],
+            quote: lore && lore.levels[index],
             buttons: [{ label: '¡Vamos!', action: () => this.startPendingLevel() }],
         });
     }
@@ -656,7 +722,7 @@ class Game {
         this.showOverlay({
             titleClass: 'victory-title',
             title: '¡HAS GANADO!',
-            text: ENDING,
+            text: (CHARACTER_STORY[this.character] || {}).ending || ENDING,
             score: `Puntos: ${this.player.score} · Récord: ${this.progress.data.highScore}`,
             buttons: [{ label: 'Menú', action: () => this.showMenu() }],
         });
@@ -745,7 +811,8 @@ class Game {
         this.level.reset();
         this.scenery.setLevel(this.level);
         this.levelTime = 0;
-        this.player = new Player(this.level.spawnX, this.level.spawnY, { ...stats, character: CHARACTERS[this.character] });
+        this.player = new Player(this.level.spawnX, this.level.spawnY,
+            { ...stats, character: CHARACTERS[this.character], mercy: this.progress.difficulty.mercy });
         const ult = CHARACTERS[this.character].ultimate;
         if (ult) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
         document.getElementById('ult').hidden = !ult;
@@ -1001,7 +1068,7 @@ class Game {
         const dropY = enemy.y + enemy.height - 34;
         const paper = !enemy.isBoss && (enemy.carrying || Math.random() < 0.35);
         if (paper) this.collectibles.push(new Collectible(cx - 14, dropY, 'paper'));
-        if (Math.random() < enemy.heartDropChance) {
+        if (Math.random() < enemy.heartDropChance * (this.progress.difficulty.hearts || 1)) {
             const heart = new Collectible(cx - 14 + (paper ? 30 : 0), dropY, 'heart');
             heart.dropped = true; // no cuenta para las estrellas del nivel
             this.collectibles.push(heart);
@@ -1143,7 +1210,7 @@ class Game {
             if (c.type === 'star') player.addUltimate(10);
             if (STAR_TYPES.has(c.type) && !c.dropped) this.collectedCount++;
 
-            if (c.type === 'heart' && player.lives < 5) player.lives++;
+            if (c.type === 'heart' && player.lives < Math.max(5, this.progress.difficulty.lives)) player.lives++;
             if (c.type === 'laptop') {
                 // Vida extra: puede pasar del tope de los corazones
                 player.lives = Math.min(9, player.lives + 1);
@@ -1511,6 +1578,11 @@ class Game {
             this.accumulator -= STEP;
         }
         this.draw();
+        const playing = this.state === 'playing' || this.state === 'exiting';
+        if (playing !== this.wasPlaying) {
+            this.wasPlaying = playing;
+            document.documentElement.classList.toggle('playing', playing); // css: mandos táctiles de juego
+        }
         requestAnimationFrame(t => this.gameLoop(t));
     }
 }
