@@ -89,6 +89,7 @@ describe('Historia', () => {
             expect(lore).toBeDefined();
             expect(lore.motto).toBeTruthy();
             expect(lore.ending).toBeTruthy();
+            expect(lore.rival.length).toBeGreaterThan(0);
             expect(lore.levels).toHaveLength(levels.length);
             lore.levels.forEach(line => expect(line).toBeTruthy());
         }

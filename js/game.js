@@ -70,6 +70,7 @@ class Game {
         this.hitstop = 0;
         this.camX = 0;
         this.banner = null; // { text, timer }
+        this.speech = null; // bocadillo sobre un enemigo: { enemy, text, timer }
         this.boss = null;
         this.pendingBoss = null;
         this.flood = null;
@@ -814,7 +815,7 @@ class Game {
         this.player = new Player(this.level.spawnX, this.level.spawnY,
             { ...stats, character: CHARACTERS[this.character], mercy: this.progress.difficulty.mercy });
         const ult = CHARACTERS[this.character].ultimate;
-        if (ult) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
+        if (ult && ult.sheet) this.loadUltimate(ult).catch(e => console.error('Failed to load', ult.sheet, e));
         document.getElementById('ult').hidden = !ult;
         document.getElementById('touch-ultimate').hidden = !ult;
         this.levelStartStats = { ...stats };
@@ -829,10 +830,11 @@ class Game {
             const id = this.randomRival();
             // Sale al suelo de la arena: los jefes que caen se atascan en plataformas pequeñas
             this.pendingBoss = { ...boss, type: 'BossRival', y: GROUND_Y - 150, character: CHARACTERS[id],
-                sheet: this.sheets[id], carSheet: this.carSheet };
+                rivalId: id, sheet: this.sheets[id], carSheet: this.carSheet };
         } else {
             this.pendingBoss = boss;
         }
+        this.speech = null;
         this.stolen = false;
         this.combo = 0;
         this.comboTimer = 0;
@@ -944,15 +946,24 @@ class Game {
             Sound.play('land');
         }
         if (player.transformed) {
+            const ult = player.character.ultimate;
             const cx = player.x + player.width / 2;
             const cy = player.y + player.height / 2;
-            this.spawnParticles(cx, cy, '#e53935', 24, 16);
-            this.spawnParticles(cx, cy, '#1e88e5', 24, 16);
-            this.announce(`¡${player.character.ultimate.name}!`);
+            for (const color of ult.aura || ULT_AURA) this.spawnParticles(cx, cy, color, 24, 16);
+            if (ult.name) this.announce(`¡${ult.name}!`);
             this.triggerScreenShake(10);
             this.triggerFlash();
+            if (ult.tests) this.runTests();
         }
         this.enemies.forEach(e => e.update(player, level, this));
+        // Sentido arácnido: avisa (con un pitido al empezar) si hay un bug cerca
+        if (player.character.spiderSense) {
+            const px = player.x + player.width / 2;
+            const sensing = !player.dead && this.enemies.some(e => !e.dying &&
+                Math.abs(e.x + e.width / 2 - px) < 260 && Math.abs(e.y - player.y) < 220);
+            if (sensing && !player.sensing) Sound.play('spiderSense');
+            player.sensing = sensing;
+        }
         this.enemyProjectiles.forEach(p => p.update());
         this.collectibles.forEach(c => c.update());
 
@@ -979,6 +990,7 @@ class Game {
         this.particles.forEach(p => p.update());
         this.particles = this.particles.filter(p => p.life > 0);
         if (this.banner && --this.banner.timer <= 0) this.banner = null;
+        if (this.speech && (--this.speech.timer <= 0 || this.speech.enemy.dying)) this.speech = null;
 
         if (this.screenShake.intensity > 0) {
             this.screenShake.x = (Math.random() - 0.5) * this.screenShake.intensity;
@@ -1041,6 +1053,17 @@ class Game {
         this.enemies.forEach(e => {
             if (!e.isBoss && !e.dying && e.x + e.width < flood.x) e.takeDamage(99);
         });
+    }
+
+    // Ulti de Rober: un assert contra cada bug en pantalla. Los normales caen; los jefes se llevan un buen golpe.
+    runTests() {
+        const visible = this.enemies.filter(e => !e.dying && e.x + e.width > this.camX && e.x < this.camX + 960);
+        for (const e of visible) {
+            this.spawnText(e.x + e.width / 2, e.y - 20, '✔ PASS');
+            this.hitEnemy(e, e.isBoss ? 6 : 99, '#43a047', this.player.x + this.player.width / 2);
+        }
+        this.spawnText(this.player.x + this.player.width / 2, this.player.y - 40,
+            visible.length ? `${visible.length} TESTS EN VERDE` : 'NINGÚN BUG A LA VISTA');
     }
 
     hitEnemy(enemy, damage, color, fromX) {
@@ -1259,6 +1282,14 @@ class Game {
             this.boss.arenaX = b.arenaX;
             this.enemies.push(this.boss);
             this.announce(`¡JEFE: ${this.boss.name}!`);
+            const lines = b.rivalId && (CHARACTER_STORY[b.rivalId] || {}).rival;
+            if (lines) {
+                const text = lines[Math.floor(Math.random() * lines.length)]
+                    .replace('{player}', CHARACTERS[this.character].name);
+                this.speech = { enemy: this.boss, text, timer: 240 };
+                // Que suelte la frase antes de atacar
+                this.boss.cooldown = Math.max(this.boss.cooldown, 150);
+            }
             this.triggerScreenShake(10);
             Sound.play('boss');
             Sound.music('boss');
@@ -1410,6 +1441,7 @@ class Game {
                 this.enemies.forEach(e => e.draw(ctx, this.enemySheet));
                 this.enemyProjectiles.forEach(p => p.draw(ctx, this.itemSheet));
                 this.drawPlayer(ctx);
+                if (this.speech) this.drawSpeech(ctx, camX);
             }
             if (this.flood && this.flood.started) this.drawFlood(ctx, camX);
             this.particles.forEach(p => p.draw(ctx));
@@ -1524,6 +1556,49 @@ class Game {
         ctx.fillStyle = '#ffeb3b';
         ctx.strokeText(this.banner.text, 480, 300);
         ctx.fillText(this.banner.text, 480, 300);
+        ctx.restore();
+    }
+
+    // Bocadillo de cómic sobre la cabeza del que habla (coordenadas de mundo), sin salirse de la pantalla.
+    drawSpeech(ctx, camX) {
+        const { enemy, text, timer } = this.speech;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, timer / 20);
+        ctx.font = 'bold 18px sans-serif';
+        const words = text.split(' ');
+        const lines = [''];
+        for (const word of words) {
+            const test = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${word}` : word;
+            if (ctx.measureText(test).width > 300 && lines[lines.length - 1]) lines.push(word);
+            else lines[lines.length - 1] = test;
+        }
+        const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 32;
+        const h = lines.length * 24 + 46;
+        const cx = enemy.x + enemy.width / 2;
+        const x = Math.max(camX + 10, Math.min(camX + 950 - w, cx - w / 2));
+        const y = enemy.y - h - 24;
+        const tailX = Math.max(x + 20, Math.min(x + w - 20, cx));
+
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 14);
+        ctx.moveTo(tailX - 10, y + h);
+        ctx.lineTo(cx, enemy.y - 4);
+        ctx.lineTo(tailX + 10, y + h);
+        ctx.fill();
+        ctx.stroke();
+        // Tapa el trazo del borde donde nace el pico
+        ctx.fillRect(tailX - 8, y + h - 3, 16, 5);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#e65100';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(enemy.character.name.toUpperCase(), x + 16, y + 22);
+        ctx.fillStyle = '#111';
+        ctx.font = 'bold 18px sans-serif';
+        lines.forEach((l, i) => ctx.fillText(l, x + 16, y + 46 + i * 24));
         ctx.restore();
     }
 

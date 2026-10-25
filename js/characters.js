@@ -192,12 +192,15 @@ const ELENA_FRAMES = {
 
 // scale: altura en pantalla parecida a la de Freddy (~110 px). El resto de campos modifican a Player
 // (jumps = saltos en el aire incluido el primero; dash = dash largo con poca espera).
-// ultimate: transformación al llenar la barra. La hoja de Spider Dani tiene la misma maqueta que la de Dani.
+// ultimate: transformación al llenar la barra (`name`: cartel al activarla; sin él, no hay cartel). La hoja de la ulti de Dani tiene la misma maqueta que la de Dani;
+// sin `sheet` se queda con su hoja y solo cambia el aura (`aura`). `tests`: al activarla golpea a todo lo que se ve.
+// spiderSense: rayitas sobre la cabeza con un bug cerca.
 const CHARACTERS = {
     freddy: { name: 'Freddy', frames: FREDDY_FRAMES, scale: 0.4, desc: 'Desatascador y papel. Equilibrado' },
     dani: {
-        name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, desc: 'Dash: embiste con su coche. Ulti: Spider Dani',
-        ultimate: { name: 'SPIDER DANI', sheet: 'spiderdani', frames: DANI_FRAMES, speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false },
+        name: 'Dani', frames: DANI_FRAMES, scale: 0.16, car: true, spiderSense: true,
+        desc: 'Dash: embiste con su coche. Sentido arácnido. Ulti: más rápido, fuerte y triple salto',
+        ultimate: { sheet: 'spiderdani', frames: DANI_FRAMES, speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false },
     },
     fer: { name: 'Fer', frames: FER_FRAMES, scale: 0.185, punch: 1, reach: 20, desc: 'Puñetazo más fuerte y largo' },
     guille: { name: 'Guille', frames: GUILLE_FRAMES, scale: 0.25, speed: 4.2, jumpForce: -13, desc: 'Más rápido y salta más' },
@@ -205,7 +208,11 @@ const CHARACTERS = {
     david: { name: 'David', frames: DAVID_FRAMES, scale: 0.2, speed: 3.2, jumpForce: -14, desc: 'Salta muchísimo, pero corre menos' },
     juancarlos: { name: 'Juan Carlos', frames: JUANCARLOS_FRAMES, scale: 0.18, reach: 40, desc: 'El puñetazo que más lejos llega' },
     sergio: { name: 'Sergio', frames: SERGIO_FRAMES, scale: 0.165, speed: 4.6, desc: 'El más rápido de todos' },
-    rober: { name: 'Rober', frames: ROBER_FRAMES, scale: 0.188, speed: 3.9, jumpForce: -12.6, desc: 'Ágil: algo más rápido y saltarín' },
+    rober: {
+        name: 'Rober', frames: ROBER_FRAMES, scale: 0.188, speed: 3.9, jumpForce: -12.6,
+        desc: 'Ágil. Ulti: lanza los tests contra todos los bugs a la vista',
+        ultimate: { name: 'TODO EN VERDE', tests: true, punch: 2, aura: ['#43a047', '#c6ff00'] },
+    },
     alvaro: { name: 'Álvaro', frames: ALVARO_FRAMES, scale: 0.175, speed: 3.8, punch: 1, desc: 'Todoterreno: corre y pega algo más' },
     tony: { name: 'Tony', frames: TONY_FRAMES, scale: 0.205, dash: true, desc: 'Dash largo y casi sin espera' },
     elena: { name: 'Elena', frames: ELENA_FRAMES, scale: 0.36, speed: 3.8, jumps: 3, desc: 'Triple salto' },

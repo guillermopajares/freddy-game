@@ -9,6 +9,7 @@ const JUMP_BUFFER = 8; // frames que se recuerda un salto pulsado justo antes de
 const JUMP_CUT = -4; // soltar el salto mientras sube lo corta: salto corto
 const ULT_MAX = 100; // barra de la ulti: se llena matando enemigos y recogiendo monedas y estrellas
 const ULT_TIME = 600; // 10 s transformado
+const ULT_AURA = ['#e53935', '#1e88e5']; // colores de la ulti si el personaje no trae `aura`
 
 class Player {
     // stats.character: entrada de CHARACTERS (sin ella, Freddy).
@@ -50,6 +51,7 @@ class Player {
         this.ultimate = 0; // carga de la barra (0-ULT_MAX); solo si el personaje tiene ulti
         this.ultTimer = 0;
         this.transformed = false; // se ha transformado este frame (el juego pone el efecto)
+        this.sensing = false; // sentido arácnido: el juego lo activa con un bug cerca
         this.coyote = 0;
         this.jumpBuffer = 0;
         this.jumpHeld = false; // salto iniciado por el jugador que aún se puede cortar
@@ -385,7 +387,8 @@ class Player {
             ctx.shadowBlur = 18;
         } else if (this.ultTimer > 0) {
             // Aura de la ulti; parpadea los dos últimos segundos para avisar de que se acaba
-            ctx.shadowColor = this.ultTimer > 120 || Math.floor(this.ultTimer / 6) % 2 ? '#e53935' : '#1e88e5';
+            const [main, blink] = this.form.aura || ULT_AURA;
+            ctx.shadowColor = this.ultTimer > 120 || Math.floor(this.ultTimer / 6) % 2 ? main : blink;
             ctx.shadowBlur = 16;
         }
         sheet.draw(ctx, name, frame, cx, bottom, scale, this.facing);
@@ -404,6 +407,36 @@ class Player {
         }
 
         if (this.charge > 0) this.drawChargeMeter(ctx);
+        if (this.sensing && !this.dead) this.drawSpiderSense(ctx, cx);
+    }
+
+    // Rayitas en zigzag alrededor de la cabeza, como el sentido arácnido de los cómics; vibran.
+    drawSpiderSense(ctx, cx) {
+        const cy = this.y + 18;
+        const jitter = Math.floor(this.tick / 3) % 2 ? 2 : -2;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (const [color, width] of [['#000', 3.5], ['#ffeb3b', 1.5]]) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            for (let i = 0; i < 5; i++) {
+                const angle = -Math.PI * (0.15 + i * 0.175);
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                ctx.beginPath();
+                for (let s = 0; s <= 3; s++) {
+                    const r = 20 + s * 3;
+                    const side = (s % 2 ? 1 : -1) * (1.5 + jitter * 0.25);
+                    const x = cx + cos * r - sin * side;
+                    const y = cy + sin * r + cos * side;
+                    if (s === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
     }
 
     drawChargeMeter(ctx) {

@@ -272,7 +272,7 @@ describe('Personajes', () => {
 
 describe('Ulti', () => {
     const level = { platforms: [GROUND], width: 960, leftWall: 0 };
-    const DANI = { car: true, speed: 3.5, ultimate: { name: 'SPIDER DANI', speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false } };
+    const DANI = { car: true, speed: 3.5, ultimate: { speed: 4.6, jumpForce: -14.5, punch: 3, jumps: 3, car: false } };
 
     test('la barra solo carga en personajes con ulti y tiene tope', () => {
         const freddy = new Player(0, 0);
